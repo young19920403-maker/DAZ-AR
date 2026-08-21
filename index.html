@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DMZ 평화생태연구소 관측일지</title>
+<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+<script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+KR:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EEEFE8;        /* 야장(野帳) 종이 */
+    --paper2:#E4E6DC;
+    --ink:#22302A;          /* 기록 잉크 */
+    --rule:#B9C0B2;         /* 괘선 */
+    --faint:#78857C;
+    --seal:#BC3A2B;         /* 인주 — 도장에만 사용 */
+    --moss:#46704F;
+    --river:#3D7EA6;
+    --dmz:#B8862F;
+    --mono:"IBM Plex Mono","Pretendard",monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{font-family:"Pretendard",-apple-system,sans-serif;background:var(--paper);color:var(--ink)}
+  button{font-family:inherit;cursor:pointer}
+  button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  /* ═══ 문서형 시작 화면 ═══ */
+  #start{position:fixed;inset:0;z-index:50;overflow-y:auto;background:var(--paper);
+    background-image:repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(185,192,178,.35) 31px, rgba(185,192,178,.35) 32px)}
+  #start .doc{max-width:460px;margin:0 auto;padding:26px 22px 40px}
+  .dochead{display:flex;justify-content:space-between;align-items:baseline;
+    font-family:var(--mono);font-size:11px;color:var(--faint);
+    border-bottom:2px solid var(--ink);padding-bottom:8px}
+  .dochead b{color:var(--ink);letter-spacing:.08em}
+  #start h1{margin-top:26px;font-size:clamp(27px,7vw,40px);font-weight:800;
+    line-height:1.3;letter-spacing:-.03em}
+  #start h1 u{text-decoration:none;box-shadow:inset 0 -0.34em var(--paper2)}
+  #start .lede{margin-top:16px;font-size:14.5px;line-height:1.85;color:#41504A}
+  .fieldrow{margin-top:22px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+    padding:10px 2px;display:flex;gap:14px;font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+  .fieldrow span b{color:var(--ink);font-weight:500}
+  #start .btns{margin-top:28px;display:flex;flex-direction:column;gap:10px}
+  .obtn{display:flex;justify-content:space-between;align-items:center;width:100%;
+    border:1.5px solid var(--ink);background:transparent;color:var(--ink);
+    padding:15px 16px;font-size:15.5px;font-weight:700;border-radius:0;text-align:left}
+  .obtn small{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--faint)}
+  .obtn.primary{background:var(--ink);color:var(--paper)}
+  .obtn.primary small{color:#A9B4AC}
+  .obtn:active{transform:translate(1px,1px)}
+  #start .note{margin-top:24px;font-size:12px;line-height:1.8;color:var(--faint)}
+  #start .note a{color:var(--ink)}
+  #start .note b{color:var(--ink)}
+
+  /* ═══ 오류 안내 (문서 반려 스타일) ═══ */
+  #err{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;
+    padding:22px;background:rgba(34,48,42,.45)}
+  #err.on{display:flex}
+  #err .paper{background:var(--paper);max-width:420px;width:100%;padding:22px 20px;
+    border:1.5px solid var(--ink);position:relative}
+  #err .stamp-line{font-family:var(--mono);font-size:11px;letter-spacing:.3em;
+    color:var(--seal);border:1.5px solid var(--seal);display:inline-block;
+    padding:3px 8px;transform:rotate(-3deg)}
+  #err h2{margin-top:12px;font-size:17px;font-weight:800}
+  #err .msg{margin-top:8px;font-size:13.5px;line-height:1.75;color:#41504A}
+  #err ul{margin:12px 0 0 2px;list-style:none;font-size:12.5px;line-height:1.9;color:#41504A}
+  #err li::before{content:"— ";color:var(--faint)}
+  #err .obtn{margin-top:18px}
+
+  /* ═══ 무대 ═══ */
+  #stage{position:fixed;inset:0;display:none;overflow:hidden;z-index:10;background:transparent}
+  #stage.on{display:block}
+  #sceneMount{position:absolute;inset:0;z-index:11;pointer-events:none;background:transparent}
+  #sceneMount a-scene.embedded{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+    z-index:11!important;background:transparent!important;pointer-events:none}
+  #sceneMount canvas.a-canvas{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+    z-index:12!important;background:transparent!important;pointer-events:none}
+  video#arjs-video{position:fixed!important;inset:0!important;z-index:0!important}
+  #hud{position:absolute;inset:0;z-index:100;pointer-events:none;
+    display:flex;flex-direction:column;justify-content:space-between}
+  #hud > *{pointer-events:auto}
+
+  #topbar{display:flex;align-items:center;gap:10px;
+    background:var(--paper);border-bottom:1.5px solid var(--ink);
+    padding:10px 14px;font-family:var(--mono)}
+  #topbar .no{font-size:10.5px;color:var(--faint);letter-spacing:.06em}
+  #topbar .t{font-size:13px;font-weight:500;letter-spacing:.02em}
+  #topbar .clock{margin-left:auto;font-size:11px;color:var(--faint)}
+  #topbar .exit{background:none;border:1px solid var(--rule);color:var(--faint);
+    padding:4px 9px;font-size:11px;font-family:var(--mono)}
+
+  #arStatus{position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:120!important;
+    background:rgba(34,48,42,.88);color:#EEEFE8;border:1px solid rgba(238,239,232,.35);
+    padding:7px 11px;font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+    pointer-events:none;display:none}
+  #arStatus.ok{background:#2F6844;border-color:#7EB68F}
+  #arStatus.wait{background:#7A5B20;border-color:#D2B15B}
+  #arStatus.render{background:#285D73;border-color:#75B6CE}
+
+  #markerTip{position:absolute;top:46%;left:50%;transform:translate(-50%,-50%);
+    z-index:15;background:var(--paper);border:1.5px dashed var(--ink);
+    padding:14px 18px;font-size:13.5px;text-align:center;line-height:1.7;
+    display:none;pointer-events:none}
+  #markerTip small{font-family:var(--mono);font-size:11px;color:var(--faint)}
+
+  /* ═══ 관측일지 카드 ═══ */
+  #panel{padding:0 12px calc(12px + env(safe-area-inset-bottom))}
+  #tabs{display:flex;gap:4px;padding:0 6px}
+  .tab{flex:1;border:1.5px solid var(--ink);border-bottom:none;background:var(--paper2);
+    color:var(--faint);padding:9px 4px 8px;font-size:12.5px;font-weight:600;
+    position:relative;top:1.5px}
+  .tab.sel{background:var(--paper);color:var(--ink);z-index:2}
+  .tab .mk{display:inline-block;width:7px;height:7px;border-radius:50%;
+    border:1.5px solid currentColor;margin-right:5px;vertical-align:1px}
+  .tab.done .mk{background:var(--seal);border-color:var(--seal)}
+
+  #card{background:var(--paper);border:1.5px solid var(--ink);padding:15px 15px 14px;
+    position:relative;display:none}
+  #card.on{display:block}
+  #cK{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--faint)}
+  #cH{margin-top:5px;font-size:17.5px;font-weight:800;letter-spacing:-.02em;padding-right:78px}
+  #cB{margin-top:9px;font-size:13px;line-height:1.75;color:#3A4842}
+  .drow{margin-top:11px;border-top:1px solid var(--rule);padding-top:9px;
+    display:flex;align-items:baseline;gap:8px;font-family:var(--mono);font-size:11.5px}
+  .drow .lbl{color:var(--faint)}
+  .drow .dots{flex:1;border-bottom:1px dotted var(--rule);transform:translateY(-3px)}
+  #cBlocks{letter-spacing:1px;color:var(--dmz)}
+  #card.joint #cBlocks{color:var(--moss)}
+  #cPct{font-weight:500}
+  #joinBtn{margin-top:13px;width:100%;border:1.5px solid var(--ink);background:transparent;
+    color:var(--ink);padding:12px;font-size:14.5px;font-weight:800;letter-spacing:.02em}
+  #joinBtn:disabled{border-style:dashed;color:var(--faint);cursor:default}
+
+  /* ═══ 도장 ═══ */
+  .seal{position:absolute;top:10px;right:12px;width:72px;height:72px;border-radius:50%;
+    border:2.5px solid var(--seal);color:var(--seal);display:flex;flex-direction:column;
+    justify-content:center;align-items:center;transform:rotate(-11deg);
+    font-weight:800;line-height:1.25;letter-spacing:.06em;opacity:.92;pointer-events:none}
+  .seal::before{content:"";position:absolute;inset:4px;border-radius:50%;border:1px solid var(--seal)}
+  .seal .s1{font-size:12.5px}.seal .s2{font-size:10px;font-weight:600}
+  @keyframes stampIn{0%{transform:rotate(-11deg) scale(1.9);opacity:0}
+    60%{transform:rotate(-11deg) scale(.94);opacity:1}
+    100%{transform:rotate(-11deg) scale(1);opacity:.92}}
+  .seal.new{animation:stampIn .38s cubic-bezier(.2,.9,.3,1.2)}
+
+  /* ═══ 최종 화면 ═══ */
+  #finale{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+    padding:24px;background:rgba(34,48,42,.5)}
+  #finale.on{display:flex}
+  #finale .paper{background:var(--paper);border:1.5px solid var(--ink);max-width:430px;width:100%;
+    padding:30px 24px;text-align:center;position:relative;
+    background-image:repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(185,192,178,.3) 31px, rgba(185,192,178,.3) 32px)}
+  #finale .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.3em;color:var(--faint)}
+  #finale blockquote{margin-top:16px;font-family:"Noto Serif KR",serif;
+    font-size:clamp(18px,5vw,23px);font-weight:700;line-height:1.7;letter-spacing:-.01em}
+  #finale blockquote u{text-decoration:none;box-shadow:inset 0 -0.32em #D9CDB6}
+  #finale p{margin-top:16px;font-size:13px;line-height:1.8;color:#41504A;text-align:left}
+  #finale .seals{margin-top:20px;display:flex;justify-content:center;gap:10px}
+  #finale .seals .seal{position:static;width:58px;height:58px;transform:rotate(-8deg)}
+  #finale .seals .seal:nth-child(2){transform:rotate(4deg)}
+  #finale .seals .seal:nth-child(3){transform:rotate(-3deg)}
+  #finale .obtn{margin-top:22px}
+  @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} }
+</style>
+</head>
+<body>
+
+<!-- ═══ 시작: 연구원 등록 문서 ═══ -->
+<div id="start"><div class="doc">
+  <div class="dochead"><b>DMZ 평화생태연구소</b><span>관측일지 No.2026-001</span></div>
+  <h1>함께 관찰해야<br>보이는 <u>한반도</u></h1>
+  <p class="lede">두루미의 이동 경로도, 임진강의 물도, 백두대간의 숲도 휴전선에서 멈추지 않습니다.
+  이 연구소의 세 가지 과제는 어느 한쪽의 데이터만으로는 완성되지 않습니다.
+  연구원으로 등록하고 남과 북의 관측 기록을 이어 보세요.</p>
+  <div class="fieldrow">
+    <span>과제 <b>3건</b></span><span>소요 <b>약 5분</b></span><span>대상 <b>중학교 이상</b></span>
+  </div>
+  <div class="btns">
+    <button class="obtn primary" id="goAR">AR 관측 시작 <small>카메라 + HIRO 마커</small></button>
+    <button class="obtn" id="goDemo">화면 관측 (카메라 없이) <small>바로 실행</small></button>
+  </div>
+  <p class="note"><b>AR 관측 준비물</b> — HIRO 마커를 인쇄하거나 다른 화면에 띄운 뒤 카메라로 비추면 마커 위에 한반도가 나타납니다.
+  <a href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/HIRO.jpg" target="_blank" rel="noopener">마커 이미지 내려받기</a><br><br>
+  ※ 카메라는 <b>https:// 주소</b>에서 크롬·사파리로 열 때만 작동합니다.
+  파일을 직접 열거나(파일 앱·카카오톡) 인앱 브라우저에서는 브라우저가 카메라를 차단합니다.</p>
+</div></div>
+
+<!-- ═══ 오류 안내 ═══ -->
+<div id="err"><div class="paper">
+  <span class="stamp-line">실행 보류</span>
+  <h2 id="errT">카메라를 열 수 없습니다</h2>
+  <div class="msg" id="errM"></div>
+  <ul>
+    <li>파일을 직접 열면(<span style="font-family:var(--mono)">file://</span>) 카메라가 차단됩니다</li>
+    <li>카카오톡 등 인앱 브라우저 대신 크롬·사파리로 여세요</li>
+    <li>netlify.com/drop 또는 GitHub Pages에 올리면 https 주소가 생깁니다</li>
+  </ul>
+  <button class="obtn" id="errClose">확인</button>
+</div></div>
+
+<!-- ═══ 무대 ═══ -->
+<div id="stage">
+  <div id="sceneMount"></div>
+  <div id="arStatus" class="wait">마커 찾는 중…</div>
+  <div id="markerTip">HIRO 마커를 카메라로 비춰 주세요<br><small>검은 테두리와 바깥 흰 여백까지 화면에 모두 들어오게 해 주세요</small></div>
+  <div id="hud">
+    <div id="topbar">
+      <span class="no">No.2026-001 · FIX3</span>
+      <span class="t">DMZ 평화생태연구소 관측일지</span>
+      <span class="clock" id="clock"></span>
+      <button class="exit" id="exitBtn">종료</button>
+    </div>
+    <div id="panel">
+      <div id="tabs">
+        <button class="tab" data-t="t1"><span class="mk"></span>두루미</button>
+        <button class="tab" data-t="t2"><span class="mk"></span>임진강</button>
+        <button class="tab" data-t="t3"><span class="mk"></span>백두대간</button>
+      </div>
+      <div id="card">
+        <div id="cK"></div>
+        <div id="cH"></div>
+        <div id="cB"></div>
+        <div class="drow">
+          <span class="lbl" id="cLabel"></span><span class="dots"></span>
+          <span id="cBlocks"></span><span id="cPct"></span>
+        </div>
+        <button id="joinBtn">공동 관측 개시</button>
+        <div class="seal" id="cardSeal" style="display:none">
+          <span class="s1">공동관측</span><span class="s2">완료</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 최종 ═══ -->
+<div id="finale"><div class="paper">
+  <div class="k">관측일지 · 최종 기록</div>
+  <blockquote>국경은 생태계를<br>나누지 못합니다.<br><u>공동의 문제</u>를 이해하려면<br><u>공동의 관찰</u>이 필요합니다.</blockquote>
+  <p>세 과제가 모두 완성되었습니다. 과학은 서로 다른 체제의 사람들이 같은 데이터를
+  바라보게 만드는, 가장 오래된 소통의 언어입니다.</p>
+  <div class="seals">
+    <div class="seal"><span class="s1">두루미</span><span class="s2">完</span></div>
+    <div class="seal"><span class="s1">임진강</span><span class="s2">完</span></div>
+    <div class="seal"><span class="s1">백두대간</span><span class="s2">完</span></div>
+  </div>
+  <button class="obtn" id="againBtn">연구소로 돌아가기</button>
+</div></div>
+
+<script>
+/* 좌표계: (cx,cy)∈[0,1]², cy=0 북쪽. x=(cx-.5)W, z=(cy-.5)H */
+const W=2.2, H=3.2;
+const P=(cx,cy,y=0.03)=>`${((cx-0.5)*W).toFixed(3)} ${y} ${((cy-0.5)*H).toFixed(3)}`;
+
+const KOREA=[[.28,.10],[.38,.04],[.55,.02],[.72,.06],[.80,.14],[.72,.22],[.78,.30],
+  [.74,.34],[.70,.44],[.72,.54],[.66,.66],[.60,.74],[.48,.78],[.36,.76],
+  [.28,.70],[.24,.60],[.30,.52],[.24,.46],[.30,.38],[.26,.30],[.34,.24],[.28,.16]];
+const DMZ=[[.22,.425],[.35,.415],[.47,.405],[.60,.385],[.74,.365]];
+
+const TOPICS={
+  t1:{ k:"관측 항목 01 · 철새", name:"두루미의 겨울은 어디서 오는가", color:"#EDF3EE",
+    north:[[.66,.03],[.61,.11],[.56,.21]], south:[[.47,.405],[.462,.435]],
+    full:[[.66,.03],[.61,.11],[.56,.21],[.51,.31],[.47,.405],[.462,.435]],
+    before:{pct:42,b:"해마다 겨울, 철원평야에는 두루미와 재두루미가 날아옵니다. 남쪽에서는 월동 모습만 관측될 뿐, 이 새들이 어느 하늘을 지나 왔는지 절반의 경로는 비어 있습니다.",label:"이동경로"},
+    after:{pct:100,b:"남북의 관측 기록이 연결되자 번식지에서 월동지까지 전체 이동 경로가 나타났습니다. 어느 한쪽의 서식지가 사라지면 두루미의 겨울 전체가 사라집니다 — 보전은 함께할 때만 가능합니다.",label:"이동경로"},
+    flyY:0.16, flySize:0.028, flyN:3, flyDur:7000 },
+  t2:{ k:"관측 항목 02 · 하천", name:"임진강의 물은 국경을 모른다", color:"#4A90B8",
+    north:[[.52,.27],[.49,.33],[.455,.39]], south:[[.44,.41],[.40,.44],[.35,.465],[.30,.48]],
+    full:[[.52,.27],[.49,.33],[.455,.39],[.44,.41],[.40,.44],[.35,.465],[.30,.48]],
+    before:{pct:55,b:"임진강은 북에서 발원해 남으로 흘러 한강과 만납니다. 하류의 수위는 매일 기록되지만, 상류에서 비가 얼마나 왔는지 알 수 없다면 홍수는 예보가 아니라 통보로 닥칩니다.",label:"수문자료"},
+    after:{pct:100,b:"상류 강수·방류 자료가 공유되자 하류의 수위를 미리 계산할 수 있게 되었습니다. 하나의 강을 공유한다는 것은, 하나의 데이터를 공유해야 한다는 뜻입니다.",label:"수문자료"},
+    flyY:0.05, flySize:0.02, flyN:4, flyDur:5000 },
+  t3:{ k:"관측 항목 03 · 산림", name:"백두대간, 끊어진 초록의 등뼈", color:"#3E7C4F",
+    north:[[.58,.04],[.67,.13],[.70,.25],[.665,.35]], south:[[.675,.43],[.645,.53],[.57,.62],[.50,.70]],
+    full:[[.58,.04],[.67,.13],[.70,.25],[.665,.35],[.675,.43],[.645,.53],[.57,.62],[.50,.70]],
+    before:{pct:48,b:"백두산에서 지리산까지, 백두대간은 한반도 야생동물의 이동 통로입니다. 지금 이 생태축은 한가운데가 끊긴 채 관리됩니다 — 산양도, 담비도, 숲의 병해충도 지도의 절반만으로는 추적할 수 없습니다.",label:"생태축"},
+    after:{pct:100,b:"남북의 산림 조사가 이어지자 하나의 생태축이 복원되었습니다. 숲은 처음부터 하나였습니다. 나뉘어 있던 것은 산이 아니라 지도였습니다.",label:"생태축"},
+    flyY:0.06, flySize:0.026, flyN:2, flyDur:9000 }
+};
+
+/* ── A-Frame 컴포넌트 ── */
+AFRAME.registerComponent('polyline',{
+  schema:{pts:{type:'string'},color:{default:'#fff'},dashed:{default:false},opacity:{default:1}},
+  init(){
+    const pts=this.data.pts.trim().split('|').map(s=>{
+      const[x,y,z]=s.trim().split(/\s+/).map(Number);return new THREE.Vector3(x,y,z);});
+    const geo=new THREE.BufferGeometry().setFromPoints(pts);
+    const mat=this.data.dashed
+      ?new THREE.LineDashedMaterial({color:this.data.color,dashSize:.05,gapSize:.04,transparent:true,opacity:this.data.opacity})
+      :new THREE.LineBasicMaterial({color:this.data.color,transparent:true,opacity:this.data.opacity});
+    const line=new THREE.Line(geo,mat);
+    if(this.data.dashed)line.computeLineDistances();
+    this.el.setObject3D('line',line);
+  },
+  remove(){this.el.removeObject3D('line');}
+});
+AFRAME.registerComponent('flyer',{
+  schema:{pts:{type:'string'},dur:{default:6000},offset:{default:0}},
+  init(){
+    this.pts=this.data.pts.trim().split('|').map(s=>{
+      const[x,y,z]=s.trim().split(/\s+/).map(Number);return new THREE.Vector3(x,y,z);});
+    this.lens=[0];let a=0;
+    for(let i=1;i<this.pts.length;i++){a+=this.pts[i].distanceTo(this.pts[i-1]);this.lens.push(a);}
+    this.total=a;
+  },
+  tick(t){
+    if(!this.total)return;
+    const d=(((t+this.data.offset)%this.data.dur)/this.data.dur)*this.total;
+    let i=1;while(i<this.lens.length&&this.lens[i]<d)i++;
+    if(i>=this.pts.length)i=this.pts.length-1;
+    const seg=(d-this.lens[i-1])/((this.lens[i]-this.lens[i-1])||1);
+    this.el.object3D.position.copy(new THREE.Vector3().lerpVectors(this.pts[i-1],this.pts[i],seg));
+  }
+});
+
+function makeMapCanvas(){
+  const c=document.createElement('canvas');c.width=512;c.height=768;
+  const g=c.getContext('2d');
+  const sea=g.createLinearGradient(0,0,0,768);
+  sea.addColorStop(0,'#132A33');sea.addColorStop(1,'#0E1F27');
+  g.fillStyle=sea;g.fillRect(0,0,512,768);
+  g.beginPath();
+  KOREA.forEach(([x,y],i)=>i?g.lineTo(x*512,y*768):g.moveTo(x*512,y*768));
+  g.closePath();
+  const land=g.createLinearGradient(0,0,0,768);
+  land.addColorStop(0,'#20402E');land.addColorStop(1,'#2B4A36');
+  g.fillStyle=land;g.fill();
+  g.strokeStyle='#5E8A6E';g.lineWidth=3;g.stroke();
+  g.beginPath();
+  DMZ.forEach(([x,y],i)=>i?g.lineTo(x*512,y*768):g.moveTo(x*512,y*768));
+  g.strokeStyle='#D9A441';g.lineWidth=5;g.setLineDash([14,10]);g.stroke();
+  return c;
+}
+
+const ptsStr=(arr,y)=>arr.map(([cx,cy])=>P(cx,cy,y)).join(' | ');
+
+function buildWorld(){
+  const w=document.createElement('a-entity');w.setAttribute('id','world');
+  const plane=document.createElement('a-plane');
+  plane.setAttribute('width',W);plane.setAttribute('height',H);
+  plane.setAttribute('rotation','-90 0 0');
+  plane.setAttribute('material','shader: flat');
+  plane.addEventListener('loaded',()=>{
+    const mesh=plane.getObject3D('mesh');
+    mesh.material.map=new THREE.CanvasTexture(makeMapCanvas());
+    mesh.material.needsUpdate=true;
+  });
+  w.appendChild(plane);
+  for(const[id,T]of Object.entries(TOPICS)){
+    const grp=document.createElement('a-entity');
+    grp.setAttribute('id','grp-'+id);grp.setAttribute('visible','false');
+    const before=document.createElement('a-entity');before.setAttribute('class','ph-before');
+    const sL=document.createElement('a-entity');
+    sL.setAttribute('polyline',{pts:ptsStr(T.south,.035),color:T.color,dashed:false,opacity:.95});
+    before.appendChild(sL);
+    const nL=document.createElement('a-entity');
+    nL.setAttribute('polyline',{pts:ptsStr(T.north,.035),color:'#5A6B62',dashed:true,opacity:.7});
+    before.appendChild(nL);
+    T.south.forEach(([cx,cy])=>{
+      const d=document.createElement('a-sphere');
+      d.setAttribute('radius',.024);d.setAttribute('position',P(cx,cy,.045));
+      d.setAttribute('material',`shader: flat; color:${T.color}`);
+      before.appendChild(d);
+    });
+    const gap=T.north[T.north.length-1];
+    const ring=document.createElement('a-torus');
+    ring.setAttribute('radius',.05);ring.setAttribute('radius-tubular',.007);
+    ring.setAttribute('rotation','-90 0 0');ring.setAttribute('position',P(gap[0],gap[1],.05));
+    ring.setAttribute('material','shader: flat; color:#BC3A2B');
+    ring.setAttribute('animation','property: scale; from:1 1 1; to:1.35 1.35 1.35; dir:alternate; loop:true; dur:900; easing:easeInOutSine');
+    before.appendChild(ring);
+    grp.appendChild(before);
+    const after=document.createElement('a-entity');
+    after.setAttribute('class','ph-after');after.setAttribute('visible','false');
+    const fL=document.createElement('a-entity');
+    fL.setAttribute('polyline',{pts:ptsStr(T.full,.035),color:T.color,dashed:false,opacity:1});
+    after.appendChild(fL);
+    for(let i=0;i<T.flyN;i++){
+      const f=document.createElement('a-sphere');
+      f.setAttribute('radius',T.flySize);
+      f.setAttribute('material',`shader: flat; color:${id==='t1'?'#FFFFFF':T.color}`);
+      f.setAttribute('flyer',{pts:ptsStr(T.full,T.flyY),dur:T.flyDur,offset:i*(T.flyDur/T.flyN)});
+      after.appendChild(f);
+      if(id==='t1'){
+        const cr=document.createElement('a-sphere');
+        cr.setAttribute('radius',T.flySize*.45);
+        cr.setAttribute('material','shader: flat; color:#BC3A2B');
+        cr.setAttribute('flyer',{pts:ptsStr(T.full,T.flyY+.028),dur:T.flyDur,offset:i*(T.flyDur/T.flyN)});
+        after.appendChild(cr);
+      }
+    }
+    grp.appendChild(after);
+    w.appendChild(grp);
+  }
+  return w;
+}
+
+/* ── 실행 환경 진단 ── */
+const errBox=document.getElementById('err'),errT=document.getElementById('errT'),errM=document.getElementById('errM');
+function showErr(title,msg){errT.textContent=title;errM.textContent=msg;errBox.classList.add('on');}
+document.getElementById('errClose').onclick=()=>errBox.classList.remove('on');
+
+async function preflightCamera(){
+  // file:// 로 직접 연 경우는 모바일 브라우저에서 카메라 권한이 막히기 쉽습니다.
+  if(location.protocol==='file:'){
+    showErr('HTML 파일을 직접 열고 있습니다',
+      '이 AR은 휴대폰의 파일 앱에서 직접 여는 방식이 아니라 https:// 웹주소에서 실행해야 합니다. GitHub Pages에 index.html로 올린 뒤 그 주소를 크롬·사파리에서 열어 주세요.');
+    return false;
+  }
+  if(!window.isSecureContext){
+    showErr('보안 연결이 아닙니다',
+      '현재 페이지가 보안 연결(https://)이 아니어서 브라우저가 카메라 접근을 허용하지 않습니다. GitHub Pages 주소로 접속해 주세요.');
+    return false;
+  }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    showErr('이 브라우저는 카메라를 지원하지 않습니다',
+      '카카오톡·네이버·인스타그램 등의 인앱 브라우저 대신 안드로이드는 Chrome, 아이폰은 Safari에서 이 주소를 직접 열어 주세요.');
+    return false;
+  }
+  return true;
+}
+
+
+/* ── 모드 시작 ── */
+const start=document.getElementById('start'),stage=document.getElementById('stage'),
+      mount=document.getElementById('sceneMount'),tip=document.getElementById('markerTip'),
+      arStatus=document.getElementById('arStatus');
+
+document.getElementById('goAR').onclick=async()=>{
+  const ok=await preflightCamera();
+  if(!ok)return;
+  start.style.display='none';
+  stage.classList.add('on');
+  buildARScene();
+};
+document.getElementById('goDemo').onclick=()=>{
+  start.style.display='none';stage.classList.add('on');buildDemoScene();
+};
+document.getElementById('exitBtn').onclick=()=>location.reload();
+
+function forceARLayers(sc){
+  const apply=()=>{
+    stage.style.setProperty('z-index','10','important');
+
+    const video=document.getElementById('arjs-video');
+    if(video){
+      video.style.setProperty('z-index','0','important');
+      video.style.setProperty('position','fixed','important');
+    }
+
+    const sceneEl=sc || document.querySelector('#sceneMount a-scene');
+    if(sceneEl){
+      sceneEl.style.setProperty('z-index','11','important');
+      sceneEl.style.setProperty('background','transparent','important');
+    }
+
+    const canvas=sc && sc.canvas ? sc.canvas : document.querySelector('#sceneMount canvas.a-canvas');
+    if(canvas){
+      canvas.style.setProperty('z-index','12','important');
+      canvas.style.setProperty('position','absolute','important');
+      canvas.style.setProperty('background','transparent','important');
+      canvas.style.setProperty('pointer-events','none','important');
+    }
+
+    const hud=document.getElementById('hud');
+    if(hud) hud.style.setProperty('z-index','100','important');
+    if(arStatus) arStatus.style.setProperty('z-index','120','important');
+    if(tip) tip.style.setProperty('z-index','110','important');
+  };
+  apply();
+  setTimeout(apply,100);
+  setTimeout(apply,500);
+  setTimeout(apply,1200);
+}
+
+function buildARScene(){
+  tip.style.display='block';
+  arStatus.style.display='block';
+  arStatus.className='wait';
+  arStatus.textContent='카메라 준비 중…';
+  tip.innerHTML='카메라를 준비하고 있습니다…<br><small>권한 요청이 뜨면 “허용”을 눌러 주세요</small>';
+
+  let cameraReady=false;
+  const timeout=setTimeout(()=>{
+    if(cameraReady)return;
+    stage.classList.remove('on');
+    start.style.display='block';
+    showErr('카메라 연결이 지연되고 있습니다',
+      '페이지를 새로고침한 뒤 다시 시도해 주세요. 계속 안 되면 주소창의 사이트 설정에서 카메라 권한이 허용인지 확인하고, 카카오톡 같은 인앱 브라우저가 아니라 Chrome 또는 Safari에서 여세요.');
+  },12000);
+
+  window.addEventListener('camera-init',()=>{
+    cameraReady=true;
+    clearTimeout(timeout);
+    arStatus.className='wait';
+    arStatus.textContent='마커 찾는 중…';
+    tip.innerHTML='HIRO 마커를 카메라로 비춰 주세요<br><small>검은 테두리와 바깥 흰 여백까지 화면에 모두 들어오게 해 주세요</small>';
+  },{once:true});
+
+  window.addEventListener('camera-error',(ev)=>{
+    clearTimeout(timeout);
+    arStatus.style.display='none';
+    stage.classList.remove('on');
+    start.style.display='block';
+    const name=ev&&ev.detail&&ev.detail.error&&ev.detail.error.name
+      ? ev.detail.error.name
+      : (ev&&ev.error&&ev.error.name ? ev.error.name : 'CameraError');
+    showErr('카메라를 열 수 없습니다',
+      `브라우저가 카메라 스트림을 시작하지 못했습니다 (${name}). 사이트 카메라 권한을 허용한 뒤 다시 실행해 주세요.`);
+  },{once:true});
+
+  const sc=document.createElement('a-scene');
+  sc.setAttribute('embedded','');
+  sc.setAttribute('arjs','sourceType: webcam; trackingMethod: best; detectionMode: mono; debugUIEnabled: false;');
+  sc.setAttribute('vr-mode-ui','enabled: false');
+  sc.setAttribute('renderer','antialias: true; alpha: true; logarithmicDepthBuffer: true; precision: medium;');
+  sc.setAttribute('loading-screen','enabled: false');
+
+  const marker=document.createElement('a-marker');
+  marker.setAttribute('preset','hiro');
+  marker.setAttribute('size','1');
+  marker.setAttribute('emitevents','true');
+  marker.setAttribute('smooth','true');
+  marker.setAttribute('smooth-count','5');
+  marker.setAttribute('smooth-tolerance','0.01');
+  marker.setAttribute('smooth-threshold','2');
+
+  const world=buildWorld();
+  world.setAttribute('position','0 0.025 0');
+  world.setAttribute('scale','0.48 0.48 0.48');
+  marker.appendChild(world);
+
+  // 마커 인식 여부를 즉시 확인할 수 있는 작은 붉은 표지 기둥
+  const beacon=document.createElement('a-box');
+  beacon.setAttribute('position','0 0.5 0');
+  beacon.setAttribute('width','0.35');
+  beacon.setAttribute('height','0.70');
+  beacon.setAttribute('depth','0.35');
+  beacon.setAttribute('material','shader: flat; color: #BC3A2B');
+  marker.appendChild(beacon);
+
+  const testPlane=document.createElement('a-plane');
+  testPlane.setAttribute('position','0 0.012 0');
+  testPlane.setAttribute('rotation','-90 0 0');
+  testPlane.setAttribute('width','0.55');
+  testPlane.setAttribute('height','0.55');
+  testPlane.setAttribute('material','shader: flat; color: #39D353; opacity: 0.72; transparent: true');
+  marker.appendChild(testPlane);
+
+  marker.addEventListener('markerFound',()=>{
+    forceARLayers(sc);
+    tip.style.display='none';
+    arStatus.className='ok';
+    arStatus.textContent='✓ HIRO 마커 인식됨 · 3D 표시';
+    // 첫 과제를 자동으로 열어 AR 결과가 즉시 보이도록 함
+    if(!state.sel) setTimeout(()=>showTopic('t1'), 100);
+  });
+  marker.addEventListener('markerLost',()=>{
+    if(cameraReady){
+      arStatus.className='wait';
+      arStatus.textContent='마커 찾는 중…';
+      tip.style.display='block';
+      tip.innerHTML='HIRO 마커를 카메라로 비춰 주세요<br><small>검은 테두리와 바깥 흰 여백까지 화면에 모두 들어오게 해 주세요</small>';
+    }
+  });
+  sc.appendChild(marker);
+
+  const cam=document.createElement('a-entity');
+  cam.setAttribute('camera','');
+  sc.appendChild(cam);
+  mount.appendChild(sc);
+
+  sc.addEventListener('renderstart',()=>{
+    forceARLayers(sc);
+    if(arStatus.className!=='ok'){
+      arStatus.className='render';
+      arStatus.textContent='3D 렌더러 준비됨 · 마커 찾는 중…';
+    }
+  },{once:true});
+
+  const layerObserver=new MutationObserver(()=>forceARLayers(sc));
+  layerObserver.observe(document.body,{childList:true,subtree:true});
+  setTimeout(()=>layerObserver.disconnect(),5000);
+}
+
+function buildDemoScene(){
+  const sc=document.createElement('a-scene');
+  sc.setAttribute('embedded','');sc.setAttribute('vr-mode-ui','enabled: false');
+  sc.setAttribute('background','color: #0E1F27');
+  const world=buildWorld();
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    world.setAttribute('animation','property: rotation; to: 0 360 0; dur: 80000; loop: true; easing: linear');
+  sc.appendChild(world);
+  const li=document.createElement('a-entity');
+  li.setAttribute('light','type: ambient; intensity: 1.0');sc.appendChild(li);
+  const cam=document.createElement('a-entity');
+  cam.setAttribute('camera','');cam.setAttribute('position','0 3.0 3.2');
+  cam.setAttribute('rotation','-44 0 0');
+  cam.setAttribute('look-controls','enabled: false');cam.setAttribute('wasd-controls','enabled: false');
+  sc.appendChild(cam);
+  mount.appendChild(sc);
+}
+
+/* ── 시계 ── */
+setInterval(()=>{
+  const d=new Date();
+  document.getElementById('clock').textContent=
+    `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+},1000);
+
+/* ── 상호작용 ── */
+const state={sel:null,done:new Set()};
+const card=document.getElementById('card'),cK=document.getElementById('cK'),
+      cH=document.getElementById('cH'),cB=document.getElementById('cB'),
+      cLabel=document.getElementById('cLabel'),cBlocks=document.getElementById('cBlocks'),
+      cPct=document.getElementById('cPct'),joinBtn=document.getElementById('joinBtn'),
+      cardSeal=document.getElementById('cardSeal');
+
+function blocks(pct){const n=Math.round(pct/10);return '█'.repeat(n)+'░'.repeat(10-n);}
+
+function showTopic(id){
+  state.sel=id;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('sel',t.dataset.t===id));
+  for(const t of Object.keys(TOPICS)){
+    const g=document.getElementById('grp-'+t);
+    if(g)g.setAttribute('visible',t===id);
+  }
+  renderCard(false);
+}
+function renderCard(justStamped){
+  const id=state.sel,T=TOPICS[id],joint=state.done.has(id);
+  const ph=joint?T.after:T.before;
+  card.classList.add('on');card.classList.toggle('joint',joint);
+  cK.textContent=T.k;cH.textContent=T.name;cB.textContent=ph.b;
+  cLabel.textContent=ph.label;cBlocks.textContent=blocks(ph.pct);cPct.textContent=ph.pct+'%';
+  joinBtn.disabled=joint;
+  joinBtn.textContent=joint?'공동 관측 완료':'공동 관측 개시';
+  cardSeal.style.display=joint?'flex':'none';
+  cardSeal.classList.toggle('new',!!justStamped);
+  const g=document.getElementById('grp-'+id);
+  if(g){
+    g.querySelector('.ph-before').setAttribute('visible',!joint);
+    g.querySelector('.ph-after').setAttribute('visible',joint);
+  }
+}
+joinBtn.onclick=()=>{
+  if(!state.sel||state.done.has(state.sel))return;
+  state.done.add(state.sel);
+  document.querySelector(`.tab[data-t="${state.sel}"]`).classList.add('done');
+  renderCard(true);
+  if(state.done.size===3)
+    setTimeout(()=>document.getElementById('finale').classList.add('on'),1700);
+};
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>showTopic(t.dataset.t));
+document.getElementById('againBtn').onclick=()=>document.getElementById('finale').classList.remove('on');
+</script>
+</body>
+</html>
