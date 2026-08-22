@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DMZ 평화생태연구소 관측일지</title>
+<script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+KR:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EEEFE8; --paper2:#E4E6DC; --ink:#22302A; --rule:#B9C0B2;
+    --faint:#78857C; --seal:#BC3A2B; --moss:#46704F; --river:#3D7EA6; --dmz:#B8862F;
+    --mono:"IBM Plex Mono","Pretendard",monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{font-family:"Pretendard",-apple-system,sans-serif;background:var(--paper);color:var(--ink)}
+  button{font-family:inherit;cursor:pointer}
+  button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  #start{position:fixed;inset:0;z-index:50;overflow-y:auto;background:var(--paper);
+    background-image:repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(185,192,178,.35) 31px, rgba(185,192,178,.35) 32px)}
+  #start .doc{max-width:460px;margin:0 auto;padding:26px 22px 40px}
+  .dochead{display:flex;justify-content:space-between;align-items:baseline;
+    font-family:var(--mono);font-size:11px;color:var(--faint);
+    border-bottom:2px solid var(--ink);padding-bottom:8px}
+  .dochead b{color:var(--ink);letter-spacing:.08em}
+  #start h1{margin-top:26px;font-size:clamp(27px,7vw,40px);font-weight:800;line-height:1.3;letter-spacing:-.03em}
+  #start h1 u{text-decoration:none;box-shadow:inset 0 -0.34em var(--paper2)}
+  #start .lede{margin-top:16px;font-size:14.5px;line-height:1.85;color:#41504A}
+  .fieldrow{margin-top:22px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+    padding:10px 2px;display:flex;gap:14px;font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+  .fieldrow span b{color:var(--ink);font-weight:500}
+  #start .btns{margin-top:28px;display:flex;flex-direction:column;gap:10px}
+  .obtn{display:flex;justify-content:space-between;align-items:center;width:100%;
+    border:1.5px solid var(--ink);background:transparent;color:var(--ink);
+    padding:15px 16px;font-size:15.5px;font-weight:700;border-radius:0;text-align:left}
+  .obtn small{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--faint)}
+  .obtn.primary{background:var(--ink);color:var(--paper)}
+  .obtn.primary small{color:#A9B4AC}
+  .obtn:active{transform:translate(1px,1px)}
+  #start .note{margin-top:24px;font-size:12px;line-height:1.8;color:var(--faint)}
+  #start .note b{color:var(--ink)}
+
+  #err{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;
+    padding:22px;background:rgba(34,48,42,.45)}
+  #err.on{display:flex}
+  #err .paper{background:var(--paper);max-width:420px;width:100%;padding:22px 20px;border:1.5px solid var(--ink)}
+  #err .stamp-line{font-family:var(--mono);font-size:11px;letter-spacing:.3em;color:var(--seal);
+    border:1.5px solid var(--seal);display:inline-block;padding:3px 8px;transform:rotate(-3deg)}
+  #err h2{margin-top:12px;font-size:17px;font-weight:800}
+  #err .msg{margin-top:8px;font-size:13.5px;line-height:1.75;color:#41504A}
+  #err .obtn{margin-top:18px}
+
+  /* ═══ 무대 ═══ */
+  #stage{position:fixed;inset:0;display:none;overflow:hidden;z-index:10;background:transparent}
+  #stage.demo{background:#0A141A}
+  #stage.on{display:block}
+  #sceneMount{position:absolute;inset:0;z-index:11;pointer-events:none}
+  #sceneMount a-scene.embedded{position:absolute!important;inset:0!important;
+    width:100%!important;height:100%!important;background:transparent!important;pointer-events:none}
+  #sceneMount canvas.a-canvas{position:absolute!important;inset:0!important;
+    width:100%!important;height:100%!important;background:transparent!important;pointer-events:none}
+  video#arjs-video{position:fixed!important;inset:0!important;z-index:0!important;
+    width:100%!important;height:100%!important;object-fit:cover;
+    transition:filter .6s ease, opacity .6s ease}
+  body.present video#arjs-video{filter:brightness(.32) saturate(.55) blur(2px)}
+
+  #hud{position:absolute;inset:0;z-index:100;pointer-events:none;
+    display:flex;flex-direction:column;justify-content:space-between}
+  #hud > *{pointer-events:auto}
+
+  #arStatus{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:120;
+    background:rgba(34,48,42,.88);color:#EEEFE8;border:1px solid rgba(238,239,232,.35);
+    padding:7px 11px;font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+    pointer-events:none;display:none;max-width:86vw;text-align:center}
+  #arStatus.ok{background:#2F6844;border-color:#7EB68F}
+  #arStatus.wait{background:#7A5B20;border-color:#D2B15B}
+
+  #topbar{display:flex;align-items:center;gap:10px;background:var(--paper);
+    border-bottom:1.5px solid var(--ink);padding:10px 14px;font-family:var(--mono)}
+  #topbar .no{font-size:10.5px;color:var(--faint);letter-spacing:.06em}
+  #topbar .t{font-size:13px;font-weight:500;letter-spacing:.02em}
+  #topbar .clock{margin-left:auto;font-size:11px;color:var(--faint)}
+  #topbar .exit{background:none;border:1px solid var(--rule);color:var(--faint);
+    padding:4px 9px;font-size:11px;font-family:var(--mono)}
+
+  #markerTip{position:absolute;top:44%;left:50%;transform:translate(-50%,-50%);
+    z-index:110;background:var(--paper);border:1.5px dashed var(--ink);
+    padding:14px 18px;font-size:13.5px;text-align:center;line-height:1.7;
+    display:none;pointer-events:none;max-width:80vw}
+  #markerTip small{font-family:var(--mono);font-size:11px;color:var(--faint)}
+
+  #panel{padding:0 12px calc(12px + env(safe-area-inset-bottom))}
+  #tabs{display:flex;gap:4px;padding:0 6px}
+  .tab{flex:1;border:1.5px solid var(--ink);border-bottom:none;background:var(--paper2);
+    color:var(--faint);padding:9px 4px 8px;font-size:12px;font-weight:600;position:relative;top:1.5px}
+  .tab.sel{background:var(--paper);color:var(--ink);z-index:2}
+  .tab .mk{display:inline-block;width:7px;height:7px;border-radius:50%;
+    border:1.5px solid currentColor;margin-right:4px;vertical-align:1px}
+  .tab.done .mk{background:var(--seal);border-color:var(--seal)}
+
+  #card{background:var(--paper);border:1.5px solid var(--ink);padding:15px 15px 14px;
+    position:relative;display:none}
+  #card.on{display:block}
+  #cK{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--faint)}
+  #cH{margin-top:5px;font-size:17px;font-weight:800;letter-spacing:-.02em;padding-right:78px}
+  #cB{margin-top:9px;font-size:12.8px;line-height:1.72;color:#3A4842}
+  .drow{margin-top:11px;border-top:1px solid var(--rule);padding-top:9px;
+    display:flex;align-items:baseline;gap:8px;font-family:var(--mono);font-size:11.5px}
+  .drow .lbl{color:var(--faint)}
+  .drow .dots{flex:1;border-bottom:1px dotted var(--rule);transform:translateY(-3px)}
+  #cBlocks{letter-spacing:1px;color:var(--dmz)}
+  #card.joint #cBlocks{color:var(--moss)}
+  #cPct{font-weight:500}
+  #joinBtn{margin-top:13px;width:100%;border:1.5px solid var(--ink);background:transparent;
+    color:var(--ink);padding:12px;font-size:14.5px;font-weight:800;letter-spacing:.02em}
+  #joinBtn:disabled{border-style:dashed;color:var(--faint);cursor:default}
+  #nextHint{margin-top:9px;text-align:center;font-family:var(--mono);font-size:11px;
+    color:var(--seal);display:none}
+
+  .seal{position:absolute;top:10px;right:12px;width:72px;height:72px;border-radius:50%;
+    border:2.5px solid var(--seal);color:var(--seal);display:flex;flex-direction:column;
+    justify-content:center;align-items:center;transform:rotate(-11deg);
+    font-weight:800;line-height:1.25;letter-spacing:.06em;opacity:.92;pointer-events:none}
+  .seal::before{content:"";position:absolute;inset:4px;border-radius:50%;border:1px solid var(--seal)}
+  .seal .s1{font-size:12.5px}.seal .s2{font-size:10px;font-weight:600}
+  @keyframes stampIn{0%{transform:rotate(-11deg) scale(1.9);opacity:0}
+    60%{transform:rotate(-11deg) scale(.94);opacity:1}
+    100%{transform:rotate(-11deg) scale(1);opacity:.92}}
+  .seal.new{animation:stampIn .38s cubic-bezier(.2,.9,.3,1.2)}
+
+  #finale{position:fixed;inset:0;z-index:150;display:none;align-items:center;justify-content:center;
+    padding:24px;background:rgba(34,48,42,.5)}
+  #finale.on{display:flex}
+  #finale .paper{background:var(--paper);border:1.5px solid var(--ink);max-width:430px;width:100%;
+    padding:30px 24px;text-align:center;
+    background-image:repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(185,192,178,.3) 31px, rgba(185,192,178,.3) 32px)}
+  #finale .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.3em;color:var(--faint)}
+  #finale blockquote{margin-top:16px;font-family:"Noto Serif KR",serif;
+    font-size:clamp(18px,5vw,23px);font-weight:700;line-height:1.7;letter-spacing:-.01em}
+  #finale blockquote u{text-decoration:none;box-shadow:inset 0 -0.32em #D9CDB6}
+  #finale p{margin-top:16px;font-size:13px;line-height:1.8;color:#41504A;text-align:left}
+  #finale .seals{margin-top:20px;display:flex;justify-content:center;gap:10px}
+  #finale .seals .seal{position:static;width:58px;height:58px;transform:rotate(-8deg)}
+  #finale .seals .seal:nth-child(2){transform:rotate(4deg)}
+  #finale .seals .seal:nth-child(3){transform:rotate(-3deg)}
+  #finale .obtn{margin-top:22px}
+  @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} }
+</style>
+</head>
+<body>
+
+<div id="start"><div class="doc">
+  <div class="dochead"><b>DMZ 평화생태연구소</b><span>관측일지 No.2026-001 · v4</span></div>
+  <h1>함께 관찰해야<br>보이는 <u>한반도</u></h1>
+  <p class="lede">분단선은 강물도, 바이러스도, 새의 날개도 멈추지 못합니다.
+  세 장의 관측 카드에는 협력 없이는 풀 수 없는 세 개의 과제가 담겨 있습니다 —
+  안전, 이익, 그리고 가치의 순서로.</p>
+  <div class="fieldrow">
+    <span>과제 <b>3건</b></span><span>마커 <b>3장</b></span><span>대상 <b>중학교 이상</b></span>
+  </div>
+  <div class="btns">
+    <button class="obtn primary" id="goAR">AR 관측 시작 <small>카메라 + 관측 카드 ①②③</small></button>
+    <button class="obtn" id="goDemo">화면 관측 (카메라 없이) <small>바로 실행</small></button>
+  </div>
+  <p class="note"><b>준비물</b> — 함께 제공되는 관측 카드 ①②③(markers_print 페이지)을 인쇄하세요.
+  카드를 카메라로 비추면 해당 과제가 화면 가득 펼쳐집니다.
+  카드 ① 임진강 → ② 방역 → ③ 두루미 순서로 진행합니다.</p>
+</div></div>
+
+<div id="err"><div class="paper">
+  <span class="stamp-line">실행 보류</span>
+  <h2 id="errT"></h2>
+  <div class="msg" id="errM"></div>
+  <button class="obtn" id="errClose">확인</button>
+</div></div>
+
+<div id="stage">
+  <div id="sceneMount"></div>
+  <div id="arStatus" class="wait">카메라 준비 중…</div>
+  <div id="markerTip">관측 카드 ①을 카메라로 비춰 주세요<br><small>검은 테두리 바깥 흰 여백까지 모두 들어오게</small></div>
+  <div id="hud">
+    <div id="topbar">
+      <span class="no">No.2026-001</span>
+      <span class="t">DMZ 평화생태연구소</span>
+      <span class="clock" id="clock"></span>
+      <button class="exit" id="exitBtn">종료</button>
+    </div>
+    <div id="panel">
+      <div id="tabs">
+        <button class="tab" data-t="t1"><span class="mk"></span>① 임진강</button>
+        <button class="tab" data-t="t2"><span class="mk"></span>② 방역</button>
+        <button class="tab" data-t="t3"><span class="mk"></span>③ 두루미</button>
+      </div>
+      <div id="card">
+        <div id="cK"></div><div id="cH"></div><div id="cB"></div>
+        <div class="drow">
+          <span class="lbl" id="cLabel"></span><span class="dots"></span>
+          <span id="cBlocks"></span><span id="cPct"></span>
+        </div>
+        <button id="joinBtn">공동 관측 개시</button>
+        <div id="nextHint"></div>
+        <div class="seal" id="cardSeal" style="display:none">
+          <span class="s1">공동관측</span><span class="s2">완료</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="finale"><div class="paper">
+  <div class="k">관측일지 · 최종 기록</div>
+  <blockquote>국경은 강물도 바이러스도<br>새도 멈추지 못합니다.<br><u>공동의 문제</u>에는<br><u>공동의 관찰</u>이 필요합니다.</blockquote>
+  <p>안전(임진강) — 협력이 없으면 사람이 다칩니다. 이익(방역) — 협력이 없으면 값을 치릅니다.
+  가치(두루미) — 그리고 함께여야만 지킬 수 있는 것이 있습니다.
+  과학은 서로 다른 체제의 사람들이 같은 데이터를 바라보게 만드는, 가장 오래된 소통의 언어입니다.</p>
+  <div class="seals">
+    <div class="seal"><span class="s1">임진강</span><span class="s2">完</span></div>
+    <div class="seal"><span class="s1">방 역</span><span class="s2">完</span></div>
+    <div class="seal"><span class="s1">두루미</span><span class="s2">完</span></div>
+  </div>
+  <button class="obtn" id="againBtn">연구소로 돌아가기</button>
+</div></div>
+
+<script>
+/* ══════════════ 실측 해안선 (Natural Earth 50m, 남북 병합·단순화) ══════════════ */
+const KOREA_LL = [[129.052,37.678],[129.418,37.059],[129.473,36.742],[129.404,36.052],[129.458,36.006],[129.573,36.051],[129.329,35.333],[129.214,35.182],[129.077,35.123],[128.511,35.101],[128.419,35.016],[128.444,34.87],[128.095,34.934],[128.036,35.022],[127.715,34.955],[127.639,34.89],[127.742,34.783],[127.715,34.721],[127.632,34.69],[127.524,34.84],[127.404,34.823],[127.39,34.743],[127.479,34.625],[127.325,34.463],[127.173,34.546],[127.261,34.662],[127.247,34.755],[126.897,34.439],[126.755,34.512],[126.531,34.314],[126.482,34.494],[126.264,34.673],[126.301,34.72],[126.525,34.698],[126.473,34.756],[126.593,34.824],[126.421,34.823],[126.291,35.154],[126.493,35.501],[126.614,35.571],[126.488,35.647],[126.717,35.769],[126.753,35.872],[126.647,35.922],[126.693,36.014],[126.54,36.166],[126.488,36.694],[126.389,36.651],[126.181,36.692],[126.161,36.772],[126.217,36.871],[126.487,37.007],[126.784,36.948],[126.872,36.824],[126.977,36.939],[126.869,36.976],[126.746,37.194],[126.791,37.295],[126.65,37.447],[126.563,37.717],[126.623,37.79],[126.37,37.878],[126.117,37.743],[126.05,37.87],[125.769,37.985],[125.449,37.73],[125.358,37.725],[125.311,37.844],[124.989,37.931],[125.247,38.057],[125.207,38.082],[124.691,38.129],[124.875,38.233],[124.881,38.342],[125.067,38.557],[125.31,38.665],[125.554,38.686],[125.169,38.806],[125.41,39.288],[125.361,39.527],[124.775,39.758],[124.732,39.652],[124.638,39.615],[124.557,39.791],[124.349,39.907],[124.362,40.004],[124.387,40.104],[124.889,40.46],[125.417,40.66],[125.728,40.867],[125.989,40.905],[126.49,41.358],[126.601,41.641],[126.743,41.725],[126.955,41.769],[127.18,41.531],[127.688,41.44],[128.013,41.449],[128.149,41.388],[128.289,41.607],[128.033,41.898],[128.045,41.987],[128.923,42.038],[129.196,42.218],[129.314,42.414],[129.524,42.385],[129.698,42.448],[129.861,42.965],[130.083,42.974],[130.24,42.892],[130.247,42.745],[130.498,42.571],[130.687,42.303],[130.458,42.302],[130.236,42.183],[129.756,41.712],[129.686,41.595],[129.766,41.304],[129.709,40.857],[129.341,40.726],[129.11,40.491],[128.701,40.318],[128.511,40.13],[128.304,40.036],[127.967,39.996],[127.867,39.896],[127.568,39.782],[127.523,39.377],[127.457,39.401],[127.383,39.296],[127.395,39.208],[127.786,39.084],[128.329,38.681],[128.619,38.176],[129.052,37.678]];
+
+/* 지리좌표 → 로컬좌표 */
+const BB = {lon0:124.35, lon1:130.69, lat0:34.31, lat1:42.97};
+const MAPW = 1.7, MAPH = 2.95;
+function LL(lon, lat){
+  const x = ((lon-BB.lon0)/(BB.lon1-BB.lon0) - 0.5) * MAPW;
+  const z = ((BB.lat1-lat)/(BB.lat1-BB.lat0) - 0.5) * MAPH;   // 북 = -z
+  return new THREE.Vector3(x, 0, z);
+}
+
+/* 군사분계선 근사 */
+const MDL = [[126.68,37.96],[126.94,38.03],[127.10,38.30],[127.50,38.32],[128.10,38.33],[128.36,38.61]];
+
+/* ══════════════ 3층 당위 구조 콘텐츠 ══════════════ */
+const TOPICS = {
+  t1:{ k:"과제 ① 안전 · 하천", name:"임진강 — 예보 없는 강", color:0x53B7E8, css:'#53B7E8',
+    river:[[127.06,38.72],[126.95,38.45],[127.02,38.12],[126.98,38.00],[126.85,37.90],[126.72,37.79]],
+    dmzIdx:2, dam:[126.90,38.34], gauges:[[126.98,38.00],[126.85,37.90],[126.72,37.79]],
+    danger:[126.85,37.90],
+    before:{pct:55,label:"수문자료",
+      b:"임진강은 북에서 발원해 남으로 흐릅니다. 상류의 강수·방류 자료가 없으면 하류의 홍수는 예보가 아니라 통보로 닥칩니다. 2009년, 예고 없는 방류에 남측 야영객 여섯 명이 목숨을 잃었습니다. 지금 붉게 번지는 지점이 그 하류입니다."},
+    after:{pct:100,label:"수문자료",
+      b:"상류 수문 자료가 공유되는 순간, 하류의 수위는 계산 가능한 미래가 됩니다. 경보가 먼저 도착하고, 사람이 대피할 시간이 생깁니다. 협력은 구호가 아니라 생존의 조건입니다."},
+    nextMsg:"다음 → 관측 카드 ②(방역)를 비추세요" },
+  t2:{ k:"과제 ② 이익 · 방역", name:"ASF — 국경을 모르는 바이러스", color:0xE87A53, css:'#E87A53',
+    paths:[[[127.30,38.90],[127.15,38.50],[127.07,38.05]],
+           [[127.05,38.75],[126.90,38.30],[126.78,37.85]],
+           [[127.55,38.80],[127.40,38.45],[127.31,38.25]]],
+    farms:[[127.07,38.02],[126.78,37.83],[127.31,38.22]],
+    before:{pct:40,label:"방역정보",
+      b:"2019년 아프리카돼지열병(ASF)은 야생 멧돼지를 따라 DMZ를 넘어왔습니다. 북측 발생 정보가 없으면 남측은 확진 뒤에야 살처분으로 막아야 하고, 그 비용은 결국 밥상 물가로 돌아옵니다. 붉은 원이 남측 접경 농가의 발생 지점입니다."},
+    after:{pct:100,label:"방역정보",
+      b:"발생 지점과 이동 경로가 공유되면 바이러스보다 방역선이 먼저 도착합니다. 접경을 따라 공동 차단 벨트가 세워지고 확산은 멈춥니다. 협력하지 않은 값은, 결국 내가 치릅니다."},
+    nextMsg:"다음 → 관측 카드 ③(두루미)을 비추세요" },
+  t3:{ k:"과제 ③ 가치 · 생태", name:"두루미 — 함께 지켜야 남는 겨울", color:0xF2F5EC, css:'#EDF3EE',
+    path:[[130.20,42.80],[129.30,41.50],[128.00,40.00],[127.55,39.05],[127.28,38.35],[127.22,38.20]],
+    gapIdx:2, winter:[127.24,38.25],
+    before:{pct:42,label:"이동경로",
+      b:"해마다 겨울, 철원평야에는 두루미가 날아옵니다. 남쪽에서는 월동 모습만 기록될 뿐, 이 새들이 어느 하늘을 지나왔는지 절반의 경로는 비어 있습니다. 안전과 이익 다음에, 마지막 질문이 남습니다 — 함께가 아니면 지킬 수 없는 것은 무엇인가."},
+    after:{pct:100,label:"이동경로",
+      b:"남북의 기록이 이어지자 번식지에서 월동지까지 온전한 경로가 나타났습니다. 어느 한쪽의 서식지가 사라지면 두루미의 겨울 전체가 사라집니다. 이익을 넘어, 함께여야만 지킬 수 있는 것이 있습니다."},
+    nextMsg:"세 과제 완료 — 최종 기록을 확인하세요" }
+};
+
+/* ══════════════ 글로우 스프라이트 텍스처 ══════════════ */
+function glowTexture(inner, outer){
+  const c=document.createElement('canvas'); c.width=c.height=128;
+  const g=c.getContext('2d');
+  const grd=g.createRadialGradient(64,64,4,64,64,62);
+  grd.addColorStop(0,inner); grd.addColorStop(0.35,outer); grd.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=grd; g.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+function makeSprite(tex, size, color){
+  const m=new THREE.SpriteMaterial({map:tex, color:color||0xffffff,
+    blending:THREE.AdditiveBlending, depthWrite:false, transparent:true});
+  const s=new THREE.Sprite(m); s.scale.set(size,size,1); return s;
+}
+
+/* ══════════════ 애니메이션 레지스트리 ══════════════ */
+const ANIM=[];
+AFRAME.registerComponent('anim-driver',{
+  tick(t){ for(const f of ANIM) f(t); }
+});
+
+/* ══════════════ 한반도 월드 구축 (순수 THREE) ══════════════ */
+function buildPeninsula(root){
+  const g = new THREE.Group();
+
+  /* 바다 */
+  const oc=document.createElement('canvas'); oc.width=512; oc.height=512;
+  const og=oc.getContext('2d');
+  const ogr=og.createRadialGradient(256,256,60,256,256,360);
+  ogr.addColorStop(0,'#123240'); ogr.addColorStop(1,'#08141B');
+  og.fillStyle=ogr; og.fillRect(0,0,512,512);
+  const ocean=new THREE.Mesh(
+    new THREE.PlaneGeometry(MAPW*1.55, MAPH*1.28),
+    new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(oc)}));
+  ocean.rotation.x=-Math.PI/2; ocean.position.y=-0.045;
+  g.add(ocean);
+
+  /* 육지: 실측 해안선 압출 */
+  const shape=new THREE.Shape();
+  KOREA_LL.forEach((p,i)=>{
+    const v=LL(p[0],p[1]);
+    if(i===0) shape.moveTo(v.x,-v.z); else shape.lineTo(v.x,-v.z);
+  });
+  const geo=new THREE.ExtrudeGeometry(shape,{depth:0.07,bevelEnabled:true,
+    bevelThickness:0.012,bevelSize:0.008,bevelSegments:2});
+  const land=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({
+    color:0x22493A, roughness:0.85, metalness:0.05}));
+  land.rotation.x=-Math.PI/2; land.position.y=-0.07;
+  g.add(land);
+
+  /* 해안선 발광 라인 */
+  const coastPts=KOREA_LL.map(p=>{const v=LL(p[0],p[1]); v.y=0.012; return v;});
+  coastPts.push(coastPts[0].clone());
+  const coast=new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(coastPts),
+    new THREE.LineBasicMaterial({color:0x8FE0B0, transparent:true, opacity:0.85}));
+  g.add(coast);
+
+  /* DMZ 발광 튜브 (맥동) */
+  const mdlPts=MDL.map(p=>{const v=LL(p[0],p[1]); v.y=0.02; return v;});
+  const mdlCurve=new THREE.CatmullRomCurve3(mdlPts);
+  const dmzMat=new THREE.MeshBasicMaterial({color:0xE8B14A, transparent:true, opacity:0.9});
+  const dmz=new THREE.Mesh(new THREE.TubeGeometry(mdlCurve,48,0.011,6,false), dmzMat);
+  g.add(dmz);
+  const dmzGlow=makeSprite(glowTexture('rgba(255,220,140,.9)','rgba(232,177,74,.35)'),0.22);
+  const mid=mdlCurve.getPoint(0.35); dmzGlow.position.set(mid.x,0.03,mid.z);
+  g.add(dmzGlow);
+  ANIM.push(t=>{ dmzMat.opacity=0.65+0.3*Math.sin(t/600); });
+
+  root.add(g);
+  return g;
+}
+
+/* ── 경로 튜브 ── */
+function tubeFrom(lls, color, y, radius){
+  const pts=lls.map(p=>{const v=LL(p[0],p[1]); v.y=y; return v;});
+  const curve=new THREE.CatmullRomCurve3(pts);
+  const mesh=new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 40, radius||0.009, 6, false),
+    new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.95}));
+  return {mesh, curve};
+}
+function dashedFrom(lls, color, y){
+  const pts=lls.map(p=>{const v=LL(p[0],p[1]); v.y=y; return v;});
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineDashedMaterial({color, dashSize:0.05, gapSize:0.04, transparent:true, opacity:0.6}));
+  line.computeLineDistances();
+  return line;
+}
+/* 곡선을 따라 이동하는 글로우 */
+function flyerOn(curve, tex, size, color, dur, offset, yLift){
+  const s=makeSprite(tex,size,color);
+  ANIM.push(t=>{
+    const u=((t+offset)%dur)/dur;
+    const p=curve.getPoint(u);
+    s.position.set(p.x, p.y+(yLift||0), p.z);
+    s.material.opacity=Math.min(1, 6*Math.min(u,1-u)); // 양끝 페이드
+  });
+  return s;
+}
+/* 맥동 링 (경보/발생지) */
+function pulseRing(ll, color, y, maxR){
+  const grp=new THREE.Group();
+  const mat=new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.8, side:THREE.DoubleSide});
+  const ring=new THREE.Mesh(new THREE.RingGeometry(0.018,0.026,32), mat);
+  ring.rotation.x=-Math.PI/2;
+  const v=LL(ll[0],ll[1]); grp.position.set(v.x,y,v.z);
+  grp.add(ring);
+  const dot=makeSprite(glowTexture('rgba(255,255,255,.95)','rgba(255,255,255,.2)'),0.07,color);
+  grp.add(dot);
+  ANIM.push(t=>{
+    const u=(t%1400)/1400;
+    ring.scale.setScalar(1+u*(maxR||2.4));
+    mat.opacity=0.8*(1-u);
+  });
+  return grp;
+}
+
+/* ══════════════ 과제별 씬 ══════════════ */
+const GLOW_W = glowTexture('rgba(255,255,255,.95)','rgba(200,230,255,.35)');
+const GLOW_R = glowTexture('rgba(255,120,90,.95)','rgba(230,60,40,.3)');
+const GLOW_B = glowTexture('rgba(160,220,255,.95)','rgba(83,183,232,.3)');
+
+function buildTopic(root, id){
+  const T=TOPICS[id];
+  const grp=new THREE.Group(); grp.visible=false;
+  const before=new THREE.Group(), after=new THREE.Group();
+  after.visible=false;
+  grp.add(before, after);
+
+  if(id==='t1'){
+    /* BEFORE: 남측 하류만 실선 + 북측 회색 점선 + 홍수 펄스 + 피해 지점 경보 */
+    const south=T.river.slice(T.dmzIdx);
+    const north=T.river.slice(0,T.dmzIdx+1);
+    const st=tubeFrom(south, T.color, 0.03); before.add(st.mesh);
+    before.add(dashedFrom(north, 0x5A6B62, 0.03));
+    T.gauges.forEach(g=>before.add(pulseRing(g, T.color, 0.035, 1.2)));
+    const dv=LL(T.dam[0],T.dam[1]);
+    const damQ=makeSprite(GLOW_R,0.10); damQ.position.set(dv.x,0.05,dv.z); before.add(damQ);
+    /* 홍수 펄스: 전체 강을 빠르게 훑는 밝은 덩어리 + 피해 지점 붉은 링 */
+    const full=tubeFrom(T.river, T.color, 0.03); // 곡선만 사용
+    before.add(flyerOn(full.curve, GLOW_B, 0.16, 0xCFEFFF, 2600, 0, 0.02));
+    before.add(pulseRing(T.danger, 0xE0452F, 0.04, 3.2));
+    /* AFTER: 전체 강 발광 + 잔잔한 물 입자 + 관측소 초록 */
+    const at=tubeFrom(T.river, T.color, 0.03); after.add(at.mesh);
+    for(let i=0;i<4;i++) after.add(flyerOn(at.curve, GLOW_B, 0.07, 0xBFE8FF, 6000, i*1500, 0.015));
+    T.gauges.concat([T.dam]).forEach(g=>after.add(pulseRing(g, 0x6FD08C, 0.035, 1.1)));
+  }
+
+  if(id==='t2'){
+    /* BEFORE: 멧돼지 경로 3갈래 남하 + 남측 농가 감염 확산 링 */
+    T.paths.forEach((p,i)=>{
+      before.add(dashedFrom(p, 0x8A6455, 0.03));
+      const c=tubeFrom(p, T.color, 0.03, 0.004);
+      before.add(flyerOn(c.curve, GLOW_R, 0.10, 0xFF8A66, 4200, i*1300, 0.02));
+    });
+    T.farms.forEach(f=>before.add(pulseRing(f, 0xE0452F, 0.04, 3.0)));
+    /* AFTER: DMZ 공동 방역 벨트(초록 튜브) + 농가 초록 안정 */
+    const belt=tubeFrom(MDL, 0x6FD08C, 0.045, 0.014); after.add(belt.mesh);
+    ANIM.push(t=>{ belt.mesh.material.opacity=0.6+0.35*Math.sin(t/500); });
+    T.paths.forEach(p=>{
+      const stop=p.slice(0,2); // 북측 구간에서 멈춤
+      after.add(dashedFrom(stop, 0x8A6455, 0.03));
+    });
+    T.farms.forEach(f=>after.add(pulseRing(f, 0x6FD08C, 0.035, 1.0)));
+    T.paths.forEach((p,i)=>{
+      const c=tubeFrom(p.slice(0,2), T.color, 0.03, 0.004);
+      after.add(flyerOn(c.curve, GLOW_R, 0.08, 0xFFB08C, 5200, i*1600, 0.02));
+    });
+  }
+
+  if(id==='t3'){
+    const north=T.path.slice(0,T.gapIdx+1);
+    const south=T.path.slice(T.gapIdx+2);
+    before.add(dashedFrom(north, 0x5A6B62, 0.03));
+    if(south.length>1){ const st=tubeFrom(south, T.color, 0.03, 0.006); before.add(st.mesh); }
+    before.add(pulseRing(T.path[T.gapIdx], 0xBC3A2B, 0.04, 2.2));
+    before.add(pulseRing(T.winter, 0xF2F5EC, 0.035, 1.3));
+    const at=tubeFrom(T.path, T.color, 0.03, 0.006); after.add(at.mesh);
+    for(let i=0;i<3;i++){
+      after.add(flyerOn(at.curve, GLOW_W, 0.11, 0xFFFFFF, 8000, i*2600, 0.10));
+      after.add(flyerOn(at.curve, GLOW_R, 0.045, 0xE05540, 8000, i*2600, 0.155)); // 단정
+    }
+    after.add(pulseRing(T.winter, 0x6FD08C, 0.035, 1.1));
+  }
+
+  root.add(grp);
+  return {grp, before, after};
+}
+
+/* ══════════════ 프레젠테이션 루트 ══════════════ */
+let WORLD=null, TOPIC_OBJS={};
+function buildPresentation(parentObj3D){
+  WORLD=new THREE.Group();
+  buildPeninsula(WORLD);
+  for(const id of Object.keys(TOPICS)) TOPIC_OBJS[id]=buildTopic(WORLD,id);
+  let yaw=0;
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    ANIM.push(t=>{ WORLD.rotation.y=0.06*Math.sin(t/9000); });
+  parentObj3D.add(WORLD);
+}
+
+/* ══════════════ 오류/모드 ══════════════ */
+const errBox=document.getElementById('err'),errT=document.getElementById('errT'),errM=document.getElementById('errM');
+function showErr(t,m){errT.textContent=t;errM.textContent=m;errBox.classList.add('on');}
+document.getElementById('errClose').onclick=()=>errBox.classList.remove('on');
+
+const start=document.getElementById('start'),stage=document.getElementById('stage'),
+      mount=document.getElementById('sceneMount'),tip=document.getElementById('markerTip'),
+      arStatus=document.getElementById('arStatus');
+let MODE=null;
+
+document.getElementById('goAR').onclick=()=>{
+  if(location.protocol==='file:'||!window.isSecureContext){
+    showErr('보안 연결이 아닙니다','https:// 주소(GitHub Pages)에서 열어야 카메라를 쓸 수 있습니다.');return;}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    showErr('카메라 미지원 브라우저','크롬(안드로이드)·사파리(아이폰)에서 열어 주세요.');return;}
+  MODE='ar';
+  start.style.display='none';stage.classList.add('on');
+  arStatus.style.display='block';arStatus.className='wait';arStatus.textContent='AR 모듈 로드 중…';
+  const s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js';
+  s.onload=buildARScene;
+  s.onerror=()=>{stage.classList.remove('on');start.style.display='block';arStatus.style.display='none';
+    showErr('AR 라이브러리 로드 실패','인터넷 연결 확인 후 새로고침해 주세요.');};
+  document.head.appendChild(s);
+};
+document.getElementById('goDemo').onclick=()=>{
+  MODE='demo'; start.style.display='none';stage.classList.add('on');stage.classList.add('demo');buildDemoScene();
+};
+document.getElementById('exitBtn').onclick=()=>location.reload();
+
+/* ── AR: 마커 = 트리거, 콘텐츠 = 카메라 앞 전체화면 ── */
+function buildARScene(){
+  arStatus.textContent='카메라 준비 중…'; tip.style.display='block';
+  tip.innerHTML='카메라를 준비하고 있습니다…<br><small>권한 요청이 뜨면 "허용"을 눌러 주세요</small>';
+
+  let cameraReady=false;
+  const timeout=setTimeout(()=>{
+    if(cameraReady)return;
+    stage.classList.remove('on');start.style.display='block';arStatus.style.display='none';
+    showErr('카메라 연결 지연','새로고침 후 다시 시도해 주세요. 주소창 자물쇠 → 권한에서 카메라 허용을 확인하세요.');
+  },12000);
+  window.addEventListener('camera-init',()=>{
+    cameraReady=true;clearTimeout(timeout);
+    arStatus.textContent='관측 카드 ①을 찾는 중…';
+    tip.innerHTML='관측 카드 ①(임진강)을 비춰 주세요<br><small>검은 테두리 바깥 흰 여백까지 모두 들어오게</small>';
+  },{once:true});
+  window.addEventListener('camera-error',(ev)=>{
+    clearTimeout(timeout);
+    stage.classList.remove('on');start.style.display='block';arStatus.style.display='none';
+    const n=(ev&&ev.detail&&ev.detail.error&&ev.detail.error.name)||'CameraError';
+    showErr('카메라를 열 수 없습니다',`(${n}) 사이트 카메라 권한을 허용한 뒤 다시 실행해 주세요.`);
+  },{once:true});
+
+  const sc=document.createElement('a-scene');
+  sc.setAttribute('embedded','');
+  sc.setAttribute('arjs','sourceType: webcam; detectionMode: mono; patternRatio: 0.5; debugUIEnabled: false;');
+  sc.setAttribute('vr-mode-ui','enabled: false');
+  sc.setAttribute('renderer','antialias: true; alpha: true; logarithmicDepthBuffer: true;');
+  sc.setAttribute('loading-screen','enabled: false');
+  sc.setAttribute('anim-driver','');
+
+  /* 마커 3장: 콘텐츠 없이 이벤트만 발생 */
+  [1,2,3].forEach(n=>{
+    const m=document.createElement('a-marker');
+    m.setAttribute('type','pattern');
+    m.setAttribute('url',`m${n}.patt`);
+    m.setAttribute('emitevents','true');
+    m.addEventListener('markerFound',()=>onMarkerFound('t'+n));
+    sc.appendChild(m);
+  });
+
+  /* 카메라 + 카메라 고정 프레젠테이션 리그 */
+  const cam=document.createElement('a-entity');cam.setAttribute('camera','');
+  const rig=document.createElement('a-entity');
+  rig.setAttribute('id','rig');
+  rig.setAttribute('position','0 -0.15 -2.55');
+  rig.setAttribute('rotation','-34 0 0');
+  rig.setAttribute('visible','false');
+  cam.appendChild(rig);
+  sc.appendChild(cam);
+
+  const li=document.createElement('a-entity');
+  li.setAttribute('light','type: ambient; intensity: 0.75');sc.appendChild(li);
+  const dl=document.createElement('a-entity');
+  dl.setAttribute('light','type: directional; intensity: 0.9');
+  dl.setAttribute('position','1 2 1');sc.appendChild(dl);
+
+  sc.addEventListener('loaded',()=>{ buildPresentation(rig.object3D); });
+  mount.appendChild(sc);
+}
+
+function onMarkerFound(id){
+  const n=id[1];
+  const rig=document.getElementById('rig');
+  if(rig && !rig.getAttribute('visible')){
+    rig.setAttribute('visible','true');
+    document.body.classList.add('present');
+  }
+  tip.style.display='none';
+  arStatus.className='ok';
+  arStatus.textContent=`✓ 관측 카드 ${'①②③'[n-1]} 인식 — ${TOPICS[id].name.split(' — ')[0]}`;
+  showTopic(id);
+}
+
+/* ── 데모 ── */
+function buildDemoScene(){
+  const sc=document.createElement('a-scene');
+  sc.setAttribute('embedded','');sc.setAttribute('vr-mode-ui','enabled: false');
+  sc.setAttribute('background','color: #0A141A');
+  sc.setAttribute('loading-screen','enabled: false');
+  sc.setAttribute('anim-driver','');
+  const li=document.createElement('a-entity');
+  li.setAttribute('light','type: ambient; intensity: 0.75');sc.appendChild(li);
+  const dl=document.createElement('a-entity');
+  dl.setAttribute('light','type: directional; intensity: 0.9');
+  dl.setAttribute('position','1 2 1');sc.appendChild(dl);
+  const holder=document.createElement('a-entity');
+  holder.setAttribute('position','0 0 0');sc.appendChild(holder);
+  const cam=document.createElement('a-entity');
+  cam.setAttribute('camera','');cam.setAttribute('position','0 2.7 2.6');
+  cam.setAttribute('rotation','-47 0 0');
+  cam.setAttribute('look-controls','enabled: false');cam.setAttribute('wasd-controls','enabled: false');
+  sc.appendChild(cam);
+  sc.addEventListener('loaded',()=>{ buildPresentation(holder.object3D); showTopic('t1'); });
+  mount.appendChild(sc);
+}
+
+setInterval(()=>{
+  const d=new Date();
+  document.getElementById('clock').textContent=
+    `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+},1000);
+
+/* ══════════════ 상호작용 ══════════════ */
+const state={sel:null,done:new Set()};
+const card=document.getElementById('card'),cK=document.getElementById('cK'),
+      cH=document.getElementById('cH'),cB=document.getElementById('cB'),
+      cLabel=document.getElementById('cLabel'),cBlocks=document.getElementById('cBlocks'),
+      cPct=document.getElementById('cPct'),joinBtn=document.getElementById('joinBtn'),
+      cardSeal=document.getElementById('cardSeal'),nextHint=document.getElementById('nextHint');
+
+function blocks(pct){const n=Math.round(pct/10);return '█'.repeat(n)+'░'.repeat(10-n);}
+function showTopic(id){
+  state.sel=id;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('sel',t.dataset.t===id));
+  for(const t of Object.keys(TOPICS)){
+    if(TOPIC_OBJS[t]) TOPIC_OBJS[t].grp.visible=(t===id);
+  }
+  renderCard(false);
+}
+function renderCard(justStamped){
+  const id=state.sel,T=TOPICS[id],joint=state.done.has(id);
+  const ph=joint?T.after:T.before;
+  card.classList.add('on');card.classList.toggle('joint',joint);
+  cK.textContent=T.k;cH.textContent=T.name;cB.textContent=ph.b;
+  cLabel.textContent=ph.label;cBlocks.textContent=blocks(ph.pct);cPct.textContent=ph.pct+'%';
+  joinBtn.disabled=joint;
+  joinBtn.textContent=joint?'공동 관측 완료':'공동 관측 개시';
+  cardSeal.style.display=joint?'flex':'none';
+  cardSeal.classList.toggle('new',!!justStamped);
+  nextHint.style.display=(joint&&MODE==='ar')?'block':'none';
+  nextHint.textContent=T.nextMsg||'';
+  if(TOPIC_OBJS[id]){
+    TOPIC_OBJS[id].before.visible=!joint;
+    TOPIC_OBJS[id].after.visible=joint;
+  }
+}
+joinBtn.onclick=()=>{
+  if(!state.sel||state.done.has(state.sel))return;
+  state.done.add(state.sel);
+  document.querySelector(`.tab[data-t="${state.sel}"]`).classList.add('done');
+  renderCard(true);
+  if(state.done.size===3)
+    setTimeout(()=>document.getElementById('finale').classList.add('on'),1900);
+};
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>showTopic(t.dataset.t));
+document.getElementById('againBtn').onclick=()=>document.getElementById('finale').classList.remove('on');
+</script>
+</body>
+</html>
