@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회로 속 전자들의 움직임</title>
+<style>
+  :root { --ink:#1f2933; --line:#cbd2d9; --muted:#52606d; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif; color:var(--ink); background:#fff; }
+  main { max-width: 960px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  canvas { width:100%; height:auto; display:block; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .controls { display:flex; flex-wrap:wrap; gap:12px 24px; align-items:center; margin-top:12px; }
+  button { font: inherit; font-size:15px; padding:8px 14px; border:1px solid #9aa5b1; border-radius:6px; background:#f5f7fa; cursor:pointer; }
+  button.on { background:#e0f4f8; border-color:#2a9db5; }
+  label { font-size:15px; display:flex; align-items:center; gap:8px; }
+  input[type=range] { width:180px; }
+  .val { min-width:56px; display:inline-block; font-variant-numeric: tabular-nums; }
+  .legend { margin-top:12px; font-size:14px; color:var(--muted); line-height:1.7; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; margin-right:4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>회로 속 전자들의 움직임</h1>
+  <canvas id="cv" width="900" height="580" aria-label="전기 회로 시뮬레이션"></canvas>
+  <div class="controls">
+    <button id="sw">스위치 닫기</button>
+    <button id="track">전자 하나 따라가기</button>
+    <button id="cancel">반대 방향 상쇄해 보기</button>
+    <button id="reset">처음 상태로</button>
+  </div>
+  <div class="legend">
+    <span class="dot" style="background:#1f6fd1"></span>전자
+    &nbsp;&nbsp;<span class="dot" style="background:#c3c9d1"></span>금속 양이온
+    &nbsp;&nbsp;<span class="dot" style="background:#7fd3e3"></span>도선 색: 회로 전체에 전기장이 생긴 상태<br>
+    화면에서는 전자들이 한쪽으로 조금씩 이동하는 모습이 보이도록 평균 이동 빠르기를 실제보다 크게 나타냈다. 실제 도선에서 전자들의 평균 이동은 열운동보다 훨씬 느리다.
+  </div>
+</main>
+<script>
+(() => {
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const W = 900, H = 580;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  cv.width = W * dpr; cv.height = H * dpr; ctx.scale(dpr, dpr);
+
+  // ---------- 회로 경로 (전자는 전지의 (-)극에서 나와 회로를 돌아 (+)극으로 들어간다) ----------
+  const X0 = 120, X1 = 780, Y0 = 110, Y1 = 410, BAT_TOP = 220, BAT_BOT = 300;
+  const segs = [
+    { x0:X0, y0:BAT_BOT, x1:X0, y1:Y1 },   // 왼쪽 아래로
+    { x0:X0, y0:Y1,      x1:X1, y1:Y1 },   // 아래쪽 오른쪽으로
+    { x0:X1, y0:Y1,      x1:X1, y1:Y0 },   // 오른쪽 위로
+    { x0:X1, y0:Y0,      x1:X0, y1:Y0 },   // 위쪽 왼쪽으로
+    { x0:X0, y0:Y0,      x1:X0, y1:BAT_TOP } // 왼쪽 아래로 (+)극까지
+  ];
+  let acc = 0;
+  for (const s of segs) {
+    s.len = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
+    s.ux = (s.x1 - s.x0) / s.len; s.uy = (s.y1 - s.y0) / s.len;
+    s.nx = -s.uy; s.ny = s.ux; s.s0 = acc; acc += s.len;
+  }
+  const L = acc;
+  function toXY(s, d) {
+    s = ((s % L) + L) % L;
+    for (const g of segs) {
+      if (s <= g.s0 + g.len) {
+        const t = s - g.s0;
+        return [g.x0 + g.ux * t + g.nx * d, g.y0 + g.uy * t + g.ny * d];
+      }
+    }
+    const g = segs[segs.length - 1];
+    return [g.x1, g.y1];
+  }
+  const sTop = segs[3].s0;              // 위쪽 도선 시작(오른쪽 끝)
+  const xToSTop = x => sTop + (X1 - x);
+  const sBottom = segs[1].s0;
+  const xToSBottom = x => sBottom + (x - X0);
+
+  // 부품 위치(경로 좌표)
+  const BULB1 = { s: xToSTop(450), half: 22 };   // 전구
+  const SWITCH = { s0: xToSBottom(435), s1: xToSBottom(465) };
+  const GATE_X = 640;
+
+  const BAND = 26;            // 도선 폭
+  const R_BULB = 3;           // 전구 하나의 저항
+  const VT = 70;              // 열운동 빠르기(화면 단위)
+  const DRIFT_PER_A = 8;     // 전류 1 A일 때 평균 이동 빠르기(화면 단위)
+
+  // ---------- 상태 ----------
+  const state = { on:false, V:9, R:0, track:false, trackIdx:0, cancel:false };
+  const GATE = { s: 0 };
+  const tally = { right:0, left:0, t:0, avg:0 };
+  function resetTally() { tally.right = 0; tally.left = 0; tally.t = 0; }
+  const current = () => state.on ? state.V / (R_BULB + 0.2) : 0;
+  const I_MAX = 9 / (R_BULB + 0.2);
+
+  // 양이온 격자: 도선 전체에 고르게, 저항 부분은 더 촘촘하게
+  let ions = [];
+  function inRange(s, comp) { return Math.abs(s - comp.s) <= comp.half; }
+  function buildIons() {
+    ions = [];
+    const step = 18;
+    for (let s = 6; s < L; s += step) {
+      ions.push({ s, d: -6.5 }); ions.push({ s: s + step / 2, d: 6.5 });
+    }
+    ions.sort((a, b) => a.s - b.s);
+  }
+
+  // 전자
+  const N = 260;
+  let electrons = [];
+  function randVel() {
+    const a = Math.random() * Math.PI * 2;
+    const v = VT * (0.6 + 0.8 * Math.random());
+    return [Math.cos(a) * v, Math.sin(a) * v];
+  }
+  function inSwitchGap(s) { return s > SWITCH.s0 && s < SWITCH.s1; }
+  function initElectrons() {
+    electrons = [];
+    for (let i = 0; i < N; i++) {
+      let s = (i + Math.random() * 0.8) * L / N;
+      if (inSwitchGap(s)) s = SWITCH.s1 + 2;
+      const [vs, vd] = randVel();
+      electrons.push({ s, d: (Math.random() - 0.5) * (BAND - 8), vs, vd, trail: [] });
+    }
+    state.trackIdx = Math.floor(N * 0.42);
+  }
+
+
+  // ---------- 갱신 ----------
+  function step(dt) {
+    const I = current();
+    const vDrift = DRIFT_PER_A * I;
+    const half = BAND / 2 - 3;
+    for (let i = 0; i < electrons.length; i++) {
+      const e = electrons[i];
+      const sOld = e.s;
+      // 열운동(무작위) + 전기장에 의한 평균 이동(표류)
+      e.s += (e.vs + vDrift) * dt;
+      e.d += e.vd * dt;
+      if (e.d > half) { e.d = half; e.vd = -Math.abs(e.vd); }
+      if (e.d < -half) { e.d = -half; e.vd = Math.abs(e.vd); }
+      // 스위치가 열려 있으면 끊어진 곳을 건너지 못한다
+      if (!state.on) {
+        const crossedFwd = sOld <= SWITCH.s0 && e.s > SWITCH.s0;
+        const crossedBack = sOld >= SWITCH.s1 && e.s < SWITCH.s1;
+        if (crossedFwd) { e.s = SWITCH.s0 - 0.5; e.vs = -Math.abs(e.vs); }
+        if (crossedBack) { e.s = SWITCH.s1 + 0.5; e.vs = Math.abs(e.vs); }
+      }
+      if (state.cancel) {
+        const g = xToSBottom(GATE_X);
+        if (sOld < g && e.s >= g) tally.right++;
+        else if (sOld >= g && e.s < g) tally.left++;
+      }
+      // 전지의 (+)극으로 들어간 전자는 (-)극에서 다시 나온다(전지 안의 이동은 그리지 않음)
+      if (e.s >= L) { e.s -= L; e.trail = []; }
+      if (e.s < 0) { e.s += L; e.trail = []; }
+      // 양이온과의 충돌: 가까이 가면 무작위 방향으로 튕겨 나간다
+      // 방향을 고르게 무작위로 바꾸므로 충돌이 평균 이동(표류)을 거꾸로 밀어내지 않는다
+      e.cool = (e.cool || 0) - dt;
+      const hit = nearestIon(e.s, e.d);
+      if (hit && hit.dist < 4.2 && e.cool <= 0) {
+        const [vs, vd] = randVel();
+        e.vs = vs; e.vd = vd; e.cool = 0.12;
+      }
+      if (state.track && i === state.trackIdx) {
+        e.trail.push(toXY(e.s, e.d));
+        if (e.trail.length > 160) e.trail.shift();
+      }
+    }
+    if (state.cancel) {
+      tally.t += dt;
+      let sum = 0;
+      for (const e of electrons) sum += e.vs + vDrift;
+      const avg = sum / electrons.length;
+      tally.avg += (avg - tally.avg) * Math.min(1, dt * 1.5);   // 화면 떨림을 줄이려고 부드럽게 표시
+    }
+  }
+
+  function nearestIon(s, d) {
+    // 이진 탐색으로 가까운 양이온만 확인
+    let lo = 0, hi = ions.length - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (ions[m].s < s - 6) lo = m + 1; else hi = m; }
+    let best = null, bd = 1e9;
+    for (let k = lo; k < ions.length && ions[k].s < s + 6; k++) {
+      const dist = Math.hypot(ions[k].s - s, ions[k].d - d);
+      if (dist < bd) { bd = dist; best = ions[k]; }
+    }
+    return best ? { ion: best, dist: bd } : null;
+  }
+
+  // ---------- 그리기 ----------
+  function drawWire() {
+    const I = current();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.lineWidth = BAND + 4;
+    ctx.strokeStyle = '#9aa5b1';
+    pathAll(); ctx.stroke();
+    ctx.lineWidth = BAND;
+    ctx.strokeStyle = state.on ? `rgba(70,190,215,${0.30 + 0.35 * I / I_MAX})` : '#eef0f3';
+    pathAll(); ctx.stroke();
+  }
+  function pathAll() {
+    ctx.beginPath();
+    ctx.moveTo(segs[0].x0, segs[0].y0);
+    for (const g of segs) ctx.lineTo(g.x1, g.y1);
+  }
+  function drawIons() {
+    ctx.fillStyle = '#c3c9d1';
+    for (const ion of ions) {
+      if (inSwitchGap(ion.s)) continue;
+      const [x, y] = toXY(ion.s, ion.d);
+      ctx.beginPath(); ctx.arc(x, y, 2.3, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function drawBattery() {
+    const x = X0;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - 30, BAT_TOP - 2, 60, BAT_BOT - BAT_TOP + 4);
+    ctx.strokeStyle = '#323f4b'; ctx.lineWidth = 2;
+    // (+)극: 긴 판, (-)극: 짧고 굵은 판
+    ctx.beginPath(); ctx.moveTo(x - 26, BAT_TOP + 26); ctx.lineTo(x + 26, BAT_TOP + 26); ctx.stroke();
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(x - 13, BAT_BOT - 26); ctx.lineTo(x + 13, BAT_BOT - 26); ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, BAT_TOP); ctx.lineTo(x, BAT_TOP + 26); ctx.moveTo(x, BAT_BOT - 26); ctx.lineTo(x, BAT_BOT); ctx.stroke();
+    ctx.fillStyle = '#323f4b'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('+', x + 42, BAT_TOP + 26);
+    ctx.fillText('−', x + 42, BAT_BOT - 26);
+    ctx.font = '15px sans-serif'; ctx.fillText('전지', x - 58, (BAT_TOP + BAT_BOT) / 2);
+  }
+  function drawBulb(comp, label) {
+    const I = current();
+    const b = Math.min(1, I / I_MAX);
+    const [x, y] = toXY(comp.s, 0);
+    if (b > 0.01) {
+      const g = ctx.createRadialGradient(x, y - 28, 4, x, y - 28, 22 + 40 * b);
+      g.addColorStop(0, `rgba(255,214,90,${0.85 * b})`);
+      g.addColorStop(1, 'rgba(255,214,90,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y - 28, 22 + 40 * b, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = b > 0.01 ? `rgb(${Math.round(225 + 30 * b)},${Math.round(225 + 3 * b)},${Math.round(225 - 175 * b)})` : '#e4e7eb';
+    ctx.strokeStyle = '#323f4b'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y - 28, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 6, y - 15); ctx.lineTo(x - 6, y - 2); ctx.moveTo(x + 6, y - 15); ctx.lineTo(x + 6, y - 2); ctx.stroke();
+    ctx.fillStyle = '#323f4b'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, x, y - 56 - 18 * b);
+  }
+  function drawSwitch() {
+    const [xa, y] = toXY(SWITCH.s0, 0);
+    const [xb] = toXY(SWITCH.s1, 0);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(xa, y - BAND / 2 - 3, xb - xa, BAND + 6);
+    ctx.strokeStyle = '#323f4b'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(xa, y, 3.5, 0, Math.PI * 2); ctx.arc(xb, y, 3.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xa, y);
+    if (state.on) ctx.lineTo(xb, y); else ctx.lineTo(xb - 4, y - 22);
+    ctx.stroke();
+    ctx.fillStyle = '#323f4b'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(state.on ? '스위치 닫힘' : '스위치 열림', (xa + xb) / 2, y + 34);
+  }
+  function drawElectrons() {
+    for (let i = 0; i < electrons.length; i++) {
+      const e = electrons[i];
+      const [x, y] = toXY(e.s, e.d);
+      const tracked = state.track && i === state.trackIdx;
+      if (tracked) continue;
+      ctx.fillStyle = '#1f6fd1';
+      ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
+    }
+    if (state.track) {
+      const e = electrons[state.trackIdx];
+      if (e.trail.length > 1) {
+        ctx.strokeStyle = 'rgba(230,120,20,0.75)'; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(e.trail[0][0], e.trail[0][1]);
+        for (const p of e.trail) ctx.lineTo(p[0], p[1]);
+        ctx.stroke();
+      }
+      const [x, y] = toXY(e.s, e.d);
+      ctx.fillStyle = '#e67814'; ctx.strokeStyle = '#7a3e00'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+  }
+  function drawInfo() {
+    const I = current();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '15px sans-serif'; ctx.fillStyle = '#323f4b';
+    ctx.fillText(state.on ? '회로 전체에 전기장이 생겼다' : '전기장이 없다', 150, 480);
+    // 평균 이동 방향 표시
+    if (state.on && I > 0) {
+      ctx.fillStyle = '#52606d'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+      ctx.textAlign = 'left'; ctx.fillText('전자들의 평균 이동 방향', 225, Y1 + 32);
+      arrow(160, Y1 + 32, 212, Y1 + 32);
+    }
+  }
+  function drawCancel() {
+    if (!state.cancel) return;
+    const [gx, gy] = toXY(xToSBottom(GATE_X), 0);
+    ctx.save();
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = '#323f4b'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(gx, gy - BAND / 2 - 8); ctx.lineTo(gx, gy + BAND / 2 + 8); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#323f4b'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('세는 곳', gx, gy - BAND / 2 - 16);
+    // 단면을 지나간 전자 수
+    const y = 530;
+    ctx.textAlign = 'left'; ctx.font = '15px sans-serif';
+    const net = tally.right - tally.left;
+    ctx.fillText(`세는 곳을 지나간 전자   오른쪽으로 ${tally.right}개   왼쪽으로 ${tally.left}개   차이 ${net}개`, 150, y);
+    // 모든 전자의 움직임을 더해 평균한 결과
+    ctx.fillText('모든 전자의 움직임을 더한 결과', 150, y + 30);
+    const ax = 400, len = tally.avg * 3.2;
+    ctx.strokeStyle = '#9aa5b1'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(ax, y + 22); ctx.lineTo(ax, y + 38); ctx.stroke();
+    if (Math.abs(len) > 8) arrow(ax, y + 30, ax + len, y + 30);
+    else { ctx.fillStyle = '#52606d'; ctx.fillText('거의 0', ax + 10, y + 30); }
+  }
+  function arrow(x0, y0, x1, y1) {
+    ctx.strokeStyle = '#52606d'; ctx.fillStyle = '#52606d'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    const a = Math.atan2(y1 - y0, x1 - x0);
+    ctx.beginPath(); ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - 8 * Math.cos(a - 0.4), y1 - 8 * Math.sin(a - 0.4));
+    ctx.lineTo(x1 - 8 * Math.cos(a + 0.4), y1 - 8 * Math.sin(a + 0.4));
+    ctx.closePath(); ctx.fill();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    drawWire();
+    drawIons();
+    drawSwitch();
+    drawElectrons();
+    drawBattery();
+    drawBulb(BULB1, '전구');
+    drawInfo();
+    drawCancel();
+  }
+
+  let last = performance.now();
+  function loop(t) {
+    const dt = Math.min(0.05, (t - last) / 1000); last = t;
+    step(dt); draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- 조작 ----------
+  const swBtn = document.getElementById('sw');
+  const trBtn = document.getElementById('track');
+  swBtn.onclick = () => {
+    state.on = !state.on;
+    swBtn.textContent = state.on ? '스위치 열기' : '스위치 닫기';
+    swBtn.classList.toggle('on', state.on);
+    resetTally();
+  };
+  trBtn.onclick = () => {
+    state.track = !state.track;
+    electrons[state.trackIdx].trail = [];
+    trBtn.textContent = state.track ? '따라가기 멈추기' : '전자 하나 따라가기';
+    trBtn.classList.toggle('on', state.track);
+  };
+  const cBtn = document.getElementById('cancel');
+  cBtn.onclick = () => {
+    state.cancel = !state.cancel; resetTally(); tally.avg = 0;
+    cBtn.textContent = state.cancel ? '상쇄해 보기 멈추기' : '반대 방향 상쇄해 보기';
+    cBtn.classList.toggle('on', state.cancel);
+  };
+  document.getElementById('reset').onclick = () => {
+    state.on = false; state.track = false;
+    swBtn.textContent = '스위치 닫기'; swBtn.classList.remove('on');
+    trBtn.textContent = '전자 하나 따라가기'; trBtn.classList.remove('on');
+    state.cancel = false; cBtn.textContent = '반대 방향 상쇄해 보기'; cBtn.classList.remove('on'); resetTally(); tally.avg = 0;
+    initElectrons();
+  };
+
+  buildIons(); initElectrons();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
