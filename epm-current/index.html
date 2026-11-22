@@ -33,7 +33,8 @@
   </div>
   <div class="legend">
     <span class="dot" style="background:#1f6fd1"></span>전자
-    &nbsp;&nbsp;<span class="dot" style="background:#c3c9d1"></span>금속 양이온
+    &nbsp;&nbsp;<span class="dot" style="background:#7b8794"></span>금속 양이온
+    &nbsp;&nbsp;<span class="dot" style="background:#d63031"></span>따라가는 전자와 충돌한 양이온(잠깐 붉게 표시)
     &nbsp;&nbsp;<span class="dot" style="background:#7fd3e3"></span>도선 색: 회로 전체에 전기장이 생긴 상태<br>
     화면에서는 전자들이 한쪽으로 조금씩 이동하는 모습이 보이도록 평균 이동 빠르기를 실제보다 크게 나타냈다. 실제 도선에서 전자들의 평균 이동은 열운동보다 훨씬 느리다.
   </div>
@@ -87,6 +88,8 @@
   const R_BULB = 3;           // 전구 하나의 저항
   const VT = 70;              // 열운동 빠르기(화면 단위)
   const DRIFT_PER_A = 8;     // 전류 1 A일 때 평균 이동 빠르기(화면 단위)
+  const HIT_R = 4.8;          // 전자와 양이온이 충돌한 것으로 보는 거리
+  const FLASH_T = 0.6;       // 충돌한 양이온을 밝게 표시하는 시간(초)
 
   // ---------- 상태 ----------
   const state = { on:false, V:9, R:0, track:false, trackIdx:0, cancel:false };
@@ -101,9 +104,11 @@
   function inRange(s, comp) { return Math.abs(s - comp.s) <= comp.half; }
   function buildIons() {
     ions = [];
-    const step = 18;
+    const step = 24;
     for (let s = 6; s < L; s += step) {
-      ions.push({ s, d: -6.5 }); ions.push({ s: s + step / 2, d: 6.5 });
+      ions.push({ s, d: -7, flash: 0 });
+      ions.push({ s: s + step / 3, d: 0, flash: 0 });
+      ions.push({ s: s + 2 * step / 3, d: 7, flash: 0 });
     }
     ions.sort((a, b) => a.s - b.s);
   }
@@ -155,21 +160,28 @@
         else if (sOld >= g && e.s < g) tally.left++;
       }
       // 전지의 (+)극으로 들어간 전자는 (-)극에서 다시 나온다(전지 안의 이동은 그리지 않음)
-      if (e.s >= L) { e.s -= L; e.trail = []; }
-      if (e.s < 0) { e.s += L; e.trail = []; }
+      if (e.s >= L) { e.s -= L; e.trail = []; e.hits = []; }
+      if (e.s < 0) { e.s += L; e.trail = []; e.hits = []; }
       // 양이온과의 충돌: 가까이 가면 무작위 방향으로 튕겨 나간다
       // 방향을 고르게 무작위로 바꾸므로 충돌이 평균 이동(표류)을 거꾸로 밀어내지 않는다
       e.cool = (e.cool || 0) - dt;
       const hit = nearestIon(e.s, e.d);
-      if (hit && hit.dist < 4.2 && e.cool <= 0) {
+      if (hit && hit.dist < HIT_R && e.cool <= 0) {
         const [vs, vd] = randVel();
         e.vs = vs; e.vd = vd; e.cool = 0.12;
+        if (state.track && i === state.trackIdx) {
+          hit.ion.flash = FLASH_T;   // 따라가는 전자와 충돌한 양이온만 표시(화면이 어지럽지 않게)
+          e.hits = e.hits || [];
+          e.hits.push(toXY(e.s, e.d));
+          if (e.hits.length > 12) e.hits.shift();
+        }
       }
       if (state.track && i === state.trackIdx) {
         e.trail.push(toXY(e.s, e.d));
         if (e.trail.length > 160) e.trail.shift();
       }
     }
+    for (const ion of ions) if (ion.flash > 0) ion.flash -= dt;
     if (state.cancel) {
       tally.t += dt;
       let sum = 0;
@@ -208,11 +220,17 @@
     for (const g of segs) ctx.lineTo(g.x1, g.y1);
   }
   function drawIons() {
-    ctx.fillStyle = '#c3c9d1';
     for (const ion of ions) {
       if (inSwitchGap(ion.s)) continue;
       const [x, y] = toXY(ion.s, ion.d);
-      ctx.beginPath(); ctx.arc(x, y, 2.3, 0, Math.PI * 2); ctx.fill();
+      const f = Math.max(0, ion.flash) / FLASH_T;      // 충돌 직후 1, 차츰 0
+      if (f > 0) {
+        ctx.strokeStyle = `rgba(214,48,49,${0.9 * f})`; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(x, y, 3.4 + 4.5 * (1 - f), 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.fillStyle = f > 0 ? '#d63031' : '#7b8794';
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
   }
   function drawBattery() {
@@ -278,6 +296,9 @@
         for (const p of e.trail) ctx.lineTo(p[0], p[1]);
         ctx.stroke();
       }
+      // 따라가는 전자가 양이온과 충돌한 곳
+      ctx.fillStyle = '#d63031';
+      for (const p of (e.hits || [])) { ctx.beginPath(); ctx.arc(p[0], p[1], 2.2, 0, Math.PI * 2); ctx.fill(); }
       const [x, y] = toXY(e.s, e.d);
       ctx.fillStyle = '#e67814'; ctx.strokeStyle = '#7a3e00'; ctx.lineWidth = 1.2;
       ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -356,7 +377,8 @@
   };
   trBtn.onclick = () => {
     state.track = !state.track;
-    electrons[state.trackIdx].trail = [];
+    for (const ion of ions) ion.flash = 0;
+    electrons[state.trackIdx].trail = []; electrons[state.trackIdx].hits = [];
     trBtn.textContent = state.track ? '따라가기 멈추기' : '전자 하나 따라가기';
     trBtn.classList.toggle('on', state.track);
   };
